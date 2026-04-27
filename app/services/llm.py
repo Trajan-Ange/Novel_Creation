@@ -223,10 +223,13 @@ class LLMService:
                     result["content"] = response[:response.rfind("```" + fences[i][:min(len(fences[i]), 20)])].strip()
                     return result
 
-        # Strategy 4: Find balanced { ... } JSON at end of response (no fences)
-        brace_start = response.rfind("{")
-        if brace_start != -1:
-            # Find matching closing brace
+        # Strategy 4: Find all balanced { ... } objects, pick the one with most keys.
+        # Avoids nested objects being mistaken for the main JSON container.
+        brace_positions = [i for i, ch in enumerate(response) if ch == '{']
+        best_json = None
+        best_keys = 0
+        best_start = -1
+        for brace_start in brace_positions:
             depth = 0
             in_string = False
             escape = False
@@ -250,10 +253,15 @@ class LLMService:
                     if depth == 0:
                         json_str = response[brace_start:pos + 1]
                         parsed = _try_parse_json(json_str)
-                        if parsed:
-                            result["json"] = parsed
-                            result["content"] = response[:brace_start].strip()
-                        return result
+                        if parsed and len(parsed) > best_keys:
+                            best_json = parsed
+                            best_keys = len(parsed)
+                            best_start = brace_start
+                        break
+        if best_json:
+            result["json"] = best_json
+            result["content"] = response[:best_start].strip()
+            return result
 
         return result
 
