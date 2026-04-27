@@ -3,11 +3,20 @@
 Single gateway for all LLM calls. Every skill imports only this module.
 """
 
+import asyncio
 import json
 import os
 from typing import AsyncIterator, Optional
 
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    BadRequestError,
+    InternalServerError,
+    RateLimitError,
+)
 
 
 class LLMService:
@@ -40,6 +49,30 @@ class LLMService:
     def max_tokens(self) -> int:
         return self.config.get("max_tokens", 4096)
 
+    RETRYABLE_EXCEPTIONS = (
+        RateLimitError,
+        APITimeoutError,
+        APIConnectionError,
+        InternalServerError,
+    )
+
+    async def _retry_with_backoff(self, fn, max_retries: int = 3):
+        """Execute fn with exponential backoff on transient errors.
+        Does NOT retry BadRequestError or AuthenticationError.
+        """
+        last_exception = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                return await fn()
+            except self.RETRYABLE_EXCEPTIONS as e:
+                last_exception = e
+                if attempt < max_retries:
+                    delay = 2 ** (attempt - 1)
+                    await asyncio.sleep(delay)
+            except (BadRequestError, AuthenticationError):
+                raise
+        raise last_exception
+
     def is_configured(self) -> bool:
         return self.client is not None and bool(self.config.get("api_key"))
 
@@ -50,6 +83,7 @@ class LLMService:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stream: bool = False,
+        max_retries: int = 3,
     ):
         """Single-turn chat completion. Returns full text or async stream."""
         if not self.client:
@@ -61,24 +95,30 @@ class LLMService:
         ]
 
         if stream:
-            return self._chat_stream(messages, temperature, max_tokens)
+            return self._chat_stream(messages, temperature, max_tokens, max_retries)
 
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature if temperature is not None else self.temperature,
-            max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
-        )
-        return response.choices[0].message.content
+        async def _make_request():
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature if temperature is not None else self.temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
+            )
+            return response.choices[0].message.content
 
-    async def _chat_stream(self, messages: list, temperature: Optional[float], max_tokens: Optional[int]) -> AsyncIterator[str]:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature if temperature is not None else self.temperature,
-            max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
-            stream=True,
-        )
+        return await self._retry_with_backoff(_make_request, max_retries)
+
+    async def _chat_stream(self, messages: list, temperature: Optional[float], max_tokens: Optional[int], max_retries: int = 3) -> AsyncIterator[str]:
+        async def _create_stream():
+            return await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature if temperature is not None else self.temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
+                stream=True,
+            )
+
+        response = await self._retry_with_backoff(_create_stream, max_retries)
         async for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
@@ -91,6 +131,7 @@ class LLMService:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stream: bool = False,
+        max_retries: int = 3,
     ):
         """Assemble context into user message, then call chat()."""
         context_parts = ["参考以下已有资料：\n"]
@@ -103,7 +144,7 @@ class LLMService:
         context_parts.append(f"用户指令：{user_message}")
 
         full_message = "\n".join(context_parts)
-        return await self.chat(system_prompt, full_message, temperature, max_tokens, stream)
+        return await self.chat(system_prompt, full_message, temperature, max_tokens, stream, max_retries)
 
     async def chat_with_context_and_json(
         self,

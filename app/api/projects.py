@@ -1,6 +1,6 @@
 """Project CRUD API endpoints."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -24,8 +24,10 @@ async def create_project(request: Request, body: CreateProjectRequest):
     try:
         state = fm.create_project(body.name, body.type, body.source)
         return {"success": True, "project": state}
-    except (ValueError, FileExistsError) as e:
-        return {"success": False, "error": str(e)}
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail={"success": False, "error": str(e)})
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={"success": False, "error": str(e)})
 
 
 @router.delete("/{name}")

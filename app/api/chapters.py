@@ -1,11 +1,10 @@
 """Chapter writing API endpoints with SSE streaming."""
 
-import asyncio
-import json
-
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
 
 router = APIRouter(prefix="/api/chapters", tags=["chapters"])
 
@@ -62,11 +61,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
         volume = body.volume
         chapter = body.chapter
 
-        def send(event_type: str, data: dict = None):
-            payload = {"type": event_type}
-            if data:
-                payload.update(data)
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        send = create_sse_sender()
 
         try:
             fm.ensure_volume_dir(project, volume)
@@ -89,7 +84,8 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 return
 
             # Step 1: Generate chapter outline
-            send("status", {"status": "status", "message": "正在生成章节大纲..."})
+            if await check_disconnected(request):
+                return
             yield send("status", {"message": "正在生成章节大纲..."})
 
             existing_outline = fm.read_chapter_outline(project, volume, chapter)
@@ -130,6 +126,8 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 yield send("hints", {"data": hints.get("result", {})})
 
             # Step 4: Generate chapter text with streaming
+            if await check_disconnected(request):
+                return
             stream = await chapter_run(llm, fm, project, {
                 "action": "write",
                 "volume": volume,
@@ -139,14 +137,20 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             })
 
             full_text = ""
+            chunk_count = 0
             async for chunk in stream:
                 full_text += chunk
                 yield send("text_chunk", {"text": chunk})
+                chunk_count += 1
+                if chunk_count % 10 == 0 and await check_disconnected(request):
+                    return
 
             fm.write_chapter(project, volume, chapter, full_text)
             yield send("text_complete", {"full_text": full_text})
 
             # Step 5: Knowledge sync
+            if await check_disconnected(request):
+                return
             yield send("status", {"message": "正在更新创作依据..."})
             sync_result = await sync_run(llm, fm, project, {
                 "action": "sync",
@@ -187,15 +191,13 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
         volume = body.volume
         chapter = body.chapter
 
-        def send(event_type: str, data: dict = None):
-            payload = {"type": event_type}
-            if data:
-                payload.update(data)
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        send = create_sse_sender()
 
         try:
             if body.action == "modify":
                 # Adjust outline based on feedback
+                if await check_disconnected(request):
+                    return
                 yield send("status", {"message": "正在根据反馈调整大纲..."})
                 outline_result = await outline_run(llm, fm, project, {
                     "action": "adjust_chapter",
@@ -214,6 +216,8 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
 
             elif body.action == "confirm":
                 # Proceed to generate chapter text
+                if await check_disconnected(request):
+                    return
                 yield send("status", {"message": "开始生成正文..."})
 
                 # Pre-write check
@@ -226,6 +230,8 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                     yield send("hints", {"data": hints.get("result", {})})
 
                 # Generate chapter text with streaming
+                if await check_disconnected(request):
+                    return
                 stream_result = await chapter_run(llm, fm, project, {
                     "action": "write",
                     "volume": volume,
@@ -234,14 +240,20 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                 })
 
                 full_text = ""
+                chunk_count = 0
                 async for chunk in stream_result:
                     full_text += chunk
                     yield send("text_chunk", {"text": chunk})
+                    chunk_count += 1
+                    if chunk_count % 10 == 0 and await check_disconnected(request):
+                        return
 
                 fm.write_chapter(project, volume, chapter, full_text)
                 yield send("text_complete", {"full_text": full_text})
 
                 # Knowledge sync
+                if await check_disconnected(request):
+                    return
                 yield send("status", {"message": "正在更新创作依据..."})
                 sync_result = await sync_run(llm, fm, project, {
                     "action": "sync",

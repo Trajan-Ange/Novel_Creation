@@ -198,10 +198,6 @@ async function editSetting(type, action) {
   }
 }
 
-function escapeHtml(text) {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 async function openManualEditor(type) {
   const project = AppState.currentProject;
   const container = document.getElementById('settings-content');

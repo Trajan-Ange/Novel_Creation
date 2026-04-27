@@ -1,6 +1,6 @@
 """API configuration endpoints."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services.llm import save_config
@@ -44,7 +44,7 @@ async def test_connection(request: Request):
     """Test the LLM connection."""
     llm = request.app.state.llm
     if not llm.is_configured():
-        return {"success": False, "error": "请先配置 API 密钥和地址"}
+        raise HTTPException(status_code=422, detail={"success": False, "error": "请先配置 API 密钥和地址"})
     try:
         response = await llm.chat(
             system_prompt="You are a helpful assistant.",
@@ -61,4 +61,4 @@ async def test_connection(request: Request):
             error_msg = "API 地址或模型名称无效（404 Not Found）"
         elif "timeout" in error_msg.lower() or "connect" in error_msg.lower():
             error_msg = "无法连接到 API 服务器"
-        return {"success": False, "error": error_msg}
+        raise HTTPException(status_code=500, detail={"success": False, "error": error_msg})

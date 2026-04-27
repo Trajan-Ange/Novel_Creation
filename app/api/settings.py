@@ -1,12 +1,12 @@
 """Settings management API endpoints."""
 
-import json
-
 import re
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -214,11 +214,7 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
     fm = request.app.state.fm
 
     async def event_stream():
-        def send(event_type: str, data: dict = None):
-            payload = {"type": event_type}
-            if data:
-                payload.update(data)
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        send = create_sse_sender()
 
         try:
             st = body.setting_type
@@ -320,11 +316,17 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 return
 
             # Stream the generation
+            if await check_disconnected(request):
+                return
             full_text = ""
             stream = await llm.chat(full_sys, user_msg, stream=True)
+            chunk_count = 0
             async for chunk in stream:
                 full_text += chunk
                 yield send("text_chunk", {"text": chunk})
+                chunk_count += 1
+                if chunk_count % 10 == 0 and await check_disconnected(request):
+                    return
 
             # Save to appropriate file
             if st == "world":
@@ -612,11 +614,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
     fm = request.app.state.fm
 
     async def event_stream():
-        def send(event_type: str, data: dict = None):
-            payload = {"type": event_type}
-            if data:
-                payload.update(data)
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        send = create_sse_sender()
 
         try:
             project = body.project
@@ -633,11 +631,17 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
 
                 yield send("status", {"message": "AI 正在准备访谈..."})
 
+                if await check_disconnected(request):
+                    return
                 full_text = ""
                 stream = llm._chat_stream(messages, None, None)
+                chunk_count = 0
                 async for chunk in stream:
                     full_text += chunk
                     yield send("text_chunk", {"text": chunk})
+                    chunk_count += 1
+                    if chunk_count % 10 == 0 and await check_disconnected(request):
+                        return
 
                 ready = "[READY]" in full_text
                 clean_text = full_text.replace("[READY]", "").strip()
@@ -658,11 +662,17 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
 
                 yield send("status", {"message": "AI 正在思考..."})
 
+                if await check_disconnected(request):
+                    return
                 full_text = ""
                 stream = llm._chat_stream(messages, None, None)
+                chunk_count = 0
                 async for chunk in stream:
                     full_text += chunk
                     yield send("text_chunk", {"text": chunk})
+                    chunk_count += 1
+                    if chunk_count % 10 == 0 and await check_disconnected(request):
+                        return
 
                 ready = "[READY]" in full_text
                 clean_text = full_text.replace("[READY]", "").strip()
@@ -715,11 +725,17 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
 
                 yield send("status", {"message": f"正在生成{type_name}..."})
 
+                if await check_disconnected(request):
+                    return
                 full_text = ""
                 gen_stream = await llm.chat(gen_prompt, full_user_msg, stream=True)
+                chunk_count = 0
                 async for chunk in gen_stream:
                     full_text += chunk
                     yield send("text_chunk", {"text": chunk})
+                    chunk_count += 1
+                    if chunk_count % 10 == 0 and await check_disconnected(request):
+                        return
 
                 if st == "world":
                     fm.write_world_setting(project, full_text)

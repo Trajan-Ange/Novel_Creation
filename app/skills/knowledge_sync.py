@@ -129,6 +129,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
 
         extracted = result.get("json") or {}
         summary_parts = [f"# 第{chapter}章 更新摘要\n"]
+        changed_modules = set()
 
         # Process extracted data and fan out to skills
         from app.skills.character_design import run as char_skill
@@ -149,6 +150,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 })
                 if char_result.get("success"):
                     fm.write_character(project, char_result["char_name"], char_result["content"])
+                    changed_modules.add("人物设定")
                     summary_parts.append(f"- 新人物：{char_result['char_name']}")
 
         # Process character updates
@@ -166,6 +168,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                     })
                     if update_result.get("success"):
                         fm.write_character(project, char_name, update_result["content"])
+                        changed_modules.add("人物设定")
                         summary_parts.append(f"- {char_name}：{cu.get('change', '')}")
 
         # Process new locations
@@ -184,6 +187,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             })
             if world_result.get("success"):
                 fm.write_world_setting(project, world_result["content"])
+                changed_modules.add("世界设定")
 
         # Process new events → update story timeline
         new_events = extracted.get("new_events", [])
@@ -199,6 +203,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                     fm.write_story_timeline(project, timeline_result["story"])
                 if timeline_result.get("background"):
                     fm.write_background_timeline(project, timeline_result["background"])
+                changed_modules.add("时间线")
 
         # Process relationship changes
         rel_changes = extracted.get("relationship_changes", [])
@@ -211,14 +216,14 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             })
             if rel_result.get("success"):
                 fm.write_relationship(project, rel_result["content"])
+                changed_modules.add("人物关系")
 
         # Process foreshadowing
         new_fbs = extracted.get("new_foreshadowing", [])
-        for fb in new_fbs:
+        for idx, fb in enumerate(new_fbs, start=1):
             fb_content = fb.get("content", "")
             if fb_content:
-                # Generate foreshadowing ID
-                fb_id = f"FB-{str(chapter).zfill(3)}-{str(len(new_fbs)).zfill(2)}"
+                fb_id = f"FB-{chapter:03d}-{idx:02d}"
                 fb_detail = f"# {fb_id}\n\n- 内容：{fb_content}\n- 埋设章节：第{chapter}章\n- 状态：待回收\n- 涉及人物：{', '.join(fb.get('related_characters', []))}\n- 建议回收章节：{fb.get('suggested_recovery_chapter', '待定')}\n"
                 fm.write_foreshadowing_detail(project, fb_id, fb_detail)
                 summary_parts.append(f"- 伏笔埋设：{fb_content}（{fb_id}）")
@@ -250,15 +255,17 @@ async def run(llm, fm, project: str, params: dict) -> dict:
 
         summary = "\n".join(summary_parts)
 
-        # Update version numbers
-        state = fm.get_project_state(project)
-        versions = state.get("创作依据版本", {})
-        for key in versions:
-            parts = versions[key].replace("v", "").split(".")
-            if len(parts) == 2:
-                versions[key] = f"v{parts[0]}.{int(parts[1]) + 1}"
-        state["创作依据版本"] = versions
-        fm.save_project_state(project, state)
+        # Update version numbers only for changed modules
+        if changed_modules:
+            state = fm.get_project_state(project)
+            versions = state.get("创作依据版本", {})
+            for module_key in changed_modules:
+                if module_key in versions:
+                    parts = versions[module_key].replace("v", "").split(".")
+                    if len(parts) == 2:
+                        versions[module_key] = f"v{parts[0]}.{int(parts[1]) + 1}"
+            state["创作依据版本"] = versions
+            fm.save_project_state(project, state)
 
         return {
             "success": True,

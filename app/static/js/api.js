@@ -2,7 +2,12 @@
 const API = {
   async get(url) {
     const res = await fetch(url);
-    return res.json();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errBody = body?.detail || body;
+      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
+    }
+    return body;
   },
 
   async post(url, body = {}) {
@@ -11,7 +16,12 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errBody = data?.detail || data;
+      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
+    }
+    return data;
   },
 
   async put(url, body = {}) {
@@ -20,12 +30,22 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errBody = data?.detail || data;
+      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
+    }
+    return data;
   },
 
   async del(url) {
     const res = await fetch(url, { method: 'DELETE' });
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errBody = data?.detail || data;
+      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
+    }
+    return data;
   },
 
   // ── Config ──────────────────────────────────────

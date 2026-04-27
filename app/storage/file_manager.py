@@ -19,12 +19,23 @@ class FileManager:
         os.makedirs(self.projects_root, exist_ok=True)
 
     def _project_path(self, name: str) -> str:
-        return os.path.join(self.projects_root, name)
+        raw = os.path.join(self.projects_root, name)
+        return self._validate_path(raw)
 
     def _validate_name(self, name: str):
         """Project names: alphanumeric, underscores, Chinese characters, spaces."""
         if not name or not re.match(r'^[\w一-鿿\s\-]+$', name):
             raise ValueError(f"Invalid project name: {name}")
+
+    def _validate_path(self, path: str) -> str:
+        """Resolve real path and verify it stays under projects_root.
+        Prevents symlink and directory traversal attacks.
+        """
+        real = os.path.realpath(path)
+        root_real = os.path.realpath(self.projects_root)
+        if os.path.commonpath([real, root_real]) != root_real:
+            raise ValueError(f"Path traversal detected: {path}")
+        return real
 
     def _read_file(self, path: str) -> Optional[str]:
         try:
@@ -110,6 +121,7 @@ class FileManager:
 
     def delete_project(self, name: str) -> None:
         import shutil
+        self._validate_name(name)
         proj_path = self._project_path(name)
         if os.path.exists(proj_path):
             shutil.rmtree(proj_path)

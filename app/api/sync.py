@@ -1,6 +1,6 @@
 """Knowledge sync and lore extraction API endpoints."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
@@ -28,7 +28,7 @@ async def trigger_sync(request: Request, project: str, body: SyncRequest):
 
     chapter_content = fm.read_chapter(project, body.volume, body.chapter)
     if not chapter_content:
-        return {"success": False, "error": f"第{body.volume}卷第{body.chapter}章不存在"}
+        raise HTTPException(status_code=404, detail={"success": False, "error": f"第{body.volume}卷第{body.chapter}章不存在"})
 
     result = await run(llm, fm, project, {
         "action": "sync",
