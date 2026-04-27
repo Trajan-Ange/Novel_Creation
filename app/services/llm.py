@@ -171,13 +171,13 @@ class LLMService:
 
         Tries multiple extraction strategies in order:
         1. '---JSON---' marker (custom format)
-        2. Last ```json / ``` code fence block (common LLM format)
-        3. Last ``` code fence block
+        2. Last ```json ... ``` code fence block (common LLM format)
+        3. Last ``` ... ``` code fence block
+        4. Balanced { ... } JSON object at end of response (raw JSON, no fences)
         """
         result = {"content": response, "json": None}
 
         def _try_parse_json(json_str: str):
-            """Attempt to parse a string as JSON, returning the parsed object or None."""
             try:
                 return json.loads(json_str)
             except (json.JSONDecodeError, ValueError):
@@ -212,8 +212,8 @@ class LLMService:
 
         # Strategy 3: Last ``` ... ``` block (try as JSON)
         fences = response.split("```")
-        if len(fences) >= 3:  # At least one complete code block
-            for i in range(len(fences) - 2, 0, -2):  # Check code blocks from last to first
+        if len(fences) >= 3:
+            for i in range(len(fences) - 2, 0, -2):
                 candidate = fences[i].strip()
                 if candidate.startswith("json"):
                     candidate = candidate[4:].strip()
@@ -222,6 +222,38 @@ class LLMService:
                     result["json"] = parsed
                     result["content"] = response[:response.rfind("```" + fences[i][:min(len(fences[i]), 20)])].strip()
                     return result
+
+        # Strategy 4: Find balanced { ... } JSON at end of response (no fences)
+        brace_start = response.rfind("{")
+        if brace_start != -1:
+            # Find matching closing brace
+            depth = 0
+            in_string = False
+            escape = False
+            for pos in range(brace_start, len(response)):
+                ch = response[pos]
+                if escape:
+                    escape = False
+                    continue
+                if ch == '\\':
+                    escape = True
+                    continue
+                if ch == '"' and not escape:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        json_str = response[brace_start:pos + 1]
+                        parsed = _try_parse_json(json_str)
+                        if parsed:
+                            result["json"] = parsed
+                            result["content"] = response[:brace_start].strip()
+                        return result
 
         return result
 

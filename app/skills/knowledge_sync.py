@@ -7,64 +7,58 @@ After each chapter is generated, this skill:
 """
 
 import json
+import os
 
 SYSTEM_PROMPT = """你是一位数据分析师，专精于从小说文本中提取结构化信息。
 
-你的任务是：分析章节内容，提取所有需要更新到创作依据的信息。
+你的任务是：仔细分析章节内容，提取所有值得记录的信息，用于更新创作依据。
 
 ## 提取规则
 
-### 1. 新出场人物
-识别本章中新出现的人物（之前设定中不存在的）：
-- 名称
-- 基本描述（外貌、性格、能力等）
-- 所属阵营
+### 1. 出场人物（无论新旧）
+识别本章中出现的所有人物，特别是：
+- 首次登场的角色（名称、外貌、性格、能力、阵营）
+- 已知角色的新信息（能力变化、性格发展、新身份等）
 
 ### 2. 人物状态变化
 - 能力变化（新增/升级/失去）
-- 性格变化（从A变为B）
+- 性格变化
 - 健康/心理状态变化
 - 身份变化
 - 所在地变化
 - 获得/失去物品
 
-### 3. 新地点
-- 名称
-- 描述
+### 3. 地点
+- 新出现的场景/地点名称和描述
 - 所属区域
-- 势力分布
 
 ### 4. 事件记录
-- 事件名称和描述
-- 发生时间
-- 参与人物
+- 本章发生的重要事件
+- 涉及人物
 - 影响范围
 
 ### 5. 关系变化
-- 两个人物之间的关系类型变化
-- 关系状态变化
-- 导致变化的事件
+- 人物之间关系的确立/变化/深化
 
 ### 6. 伏笔线索
-- 识别潜在的伏笔（未解之谜、神秘物品、模糊预言等）
-- 识别本章回收的伏笔
+- 本章埋下的伏笔（未解之谜、神秘物品、模糊预言等）
+- 本章回收的前文伏笔
 
 ### 7. 新设定元素
 - 新的力量/能力规则
 - 新的世界规则
-- 新的物品
+- 新的重要物品
 
-## 重要
-- 只提取本章中新出现或发生变化的信息
-- 基于已有设定判断什么是"新"的
-- 不确定的标记为"待确认"
+## 重要原则
+- 即使已有设定中已存在的人物，只要本章中有新的表现或信息，也应该记录
+- 宁可多提取，不要遗漏
+- 不确定的项目也可以列出，标记为"待确认"
 
 ## 输出格式（必须严格遵守）
 
-**第一步：** 先输出章节分析的文字总结，包括识别到的所有人事物。
+**第一步：** 先输出详细的章节分析，逐条列出你识别到的所有人、事、物、变化。这部分是你实际分析的成果，必须包含具体内容。
 
-**第二步：** 然后输出一个 JSON 代码块，包含所有提取的结构化数据。
-JSON 必须用 ```json 和 ``` 包裹，格式如下：
+**第二步：** 然后输出一个 JSON 代码块。JSON 必须用 ```json 和 ``` 包裹，格式如下：
 
 ```json
 {
@@ -100,7 +94,10 @@ JSON 必须用 ```json 和 ``` 包裹，格式如下：
 }
 ```
 
-**注意：** 即使某个字段没有内容，也必须返回空数组 [] 或空对象 {}。JSON 代码块必须完整且可解析。"""
+**关键要求：**
+- 没有对应内容的字段返回空数组 []，但不能所有字段都为空
+- JSON 代码块必须完整且可解析
+- 不要省略任何顶层字段"""
 
 
 async def run(llm, fm, project: str, params: dict) -> dict:
@@ -119,6 +116,9 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     if not chapter_content:
         return {"success": False, "error": "No chapter content provided"}
 
+    if len(chapter_content.strip()) < 50:
+        return {"success": False, "error": f"Chapter content too short ({len(chapter_content)} chars). Cannot extract meaningful information."}
+
     # Build context from existing settings
     context_docs = fm.get_all_settings(project)
     chapter_outline = fm.read_chapter_outline(project, volume, chapter)
@@ -135,9 +135,54 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             max_tokens=8192,
         )
 
+        raw_response = result.get("content", "")
         extracted = result.get("json") or {}
+
+        # ── Debug: save raw LLM response for diagnosis ──
+        try:
+            proj_path = fm._project_path(project)
+            debug_dir = os.path.join(proj_path, "调试")
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_path = os.path.join(debug_dir, f"同步原始响应_第{chapter}章.txt")
+            with open(debug_path, "w", encoding="utf-8") as f:
+                f.write(f"=== RAW RESPONSE (content) ===\n{raw_response}\n\n")
+                f.write(f"=== PARSED JSON ===\n{json.dumps(extracted, ensure_ascii=False, indent=2)}\n")
+        except Exception:
+            pass  # Debug file is best-effort, don't crash sync for it
+
         summary_parts = [f"# 第{chapter}章 更新摘要\n"]
         changed_modules = set()
+
+        # Stats
+        summary_parts.append(f"\n**章节字数：** {len(chapter_content)} 字符")
+        summary_parts.append(f"**已有设定文档数：** {len(context_docs)}")
+
+        # Include LLM's text analysis in the summary
+        if raw_response:
+            # Show first portion of analysis
+            analysis_text = raw_response[:3000]
+            if len(raw_response) > 3000:
+                analysis_text += "\n\n...（分析内容已截断，完整内容见调试文件）"
+            summary_parts.append(f"\n## AI 分析\n{analysis_text}\n")
+
+        # Show extracted JSON summary
+        if extracted:
+            json_summary_lines = []
+            for key, val in extracted.items():
+                if isinstance(val, list):
+                    json_summary_lines.append(f"- {key}: {len(val)} 项")
+                elif isinstance(val, dict):
+                    non_empty = sum(1 for v in val.values() if v)
+                    json_summary_lines.append(f"- {key}: {non_empty} 个非空字段")
+                else:
+                    json_summary_lines.append(f"- {key}: {val}")
+            summary_parts.append(f"## 提取数据概览\n" + "\n".join(json_summary_lines) + "\n")
+        else:
+            summary_parts.append("\n## 提取数据概览\n> **JSON 解析完全失败** — LLM 未返回可解析的 JSON 数据。请查看调试文件。\n")
+
+        # Warn if no structured data extracted
+        if not extracted or not any(v for v in extracted.values() if v):
+            summary_parts.append("\n> ⚠️ 未提取到结构化数据。可能原因：\n> 1. LLM 输出格式不符合 JSON 规范\n> 2. 章节中确实没有值得提取的新信息\n> 3. 模型能力不足，未能识别隐含信息\n> \n> 调试文件已保存至：`项目目录/调试/同步原始响应_第{ch}章.txt`\n".replace("{ch}", str(chapter)))
 
         # Process extracted data and fan out to skills
         from app.skills.character_design import run as char_skill
@@ -149,82 +194,109 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         # Process new characters
         new_chars = extracted.get("new_characters", [])
         for nc in new_chars:
-            char_name = nc.get("name", "")
-            if char_name:
-                char_result = await char_skill(llm, fm, project, {
-                    "action": "create",
-                    "instruction": f"创建角色：{char_name}，描述：{nc.get('description', '')}，阵营：{nc.get('faction', '')}",
-                    "char_name": char_name,
-                })
-                if char_result.get("success"):
-                    fm.write_character(project, char_result["char_name"], char_result["content"])
-                    changed_modules.add("人物设定")
-                    summary_parts.append(f"- 新人物：{char_result['char_name']}")
+            try:
+                char_name = nc.get("name", "") if isinstance(nc, dict) else str(nc)
+                if char_name:
+                    desc = nc.get("description", "") if isinstance(nc, dict) else ""
+                    faction = nc.get("faction", "") if isinstance(nc, dict) else ""
+                    char_result = await char_skill(llm, fm, project, {
+                        "action": "create",
+                        "instruction": f"创建角色：{char_name}，描述：{desc}，阵营：{faction}",
+                        "char_name": char_name,
+                    })
+                    if char_result.get("success"):
+                        fm.write_character(project, char_result["char_name"], char_result["content"])
+                        changed_modules.add("人物设定")
+                        summary_parts.append(f"- 新人物：{char_result['char_name']}")
+            except Exception as e:
+                summary_parts.append(f"- 新人物处理失败（{nc}）：{e}")
 
         # Process character updates
         char_updates = extracted.get("character_updates", [])
         for cu in char_updates:
-            char_name = cu.get("name", "")
-            if char_name:
-                existing = fm.read_character(project, char_name)
-                if existing:
-                    update_result = await char_skill(llm, fm, project, {
-                        "action": "update",
-                        "instruction": f"更新{cu.get('field', '')}：{cu.get('change', '')}，详情：{cu.get('detail', '')}",
-                        "char_name": char_name,
-                        "existing_content": existing,
-                    })
-                    if update_result.get("success"):
-                        fm.write_character(project, char_name, update_result["content"])
-                        changed_modules.add("人物设定")
-                        summary_parts.append(f"- {char_name}：{cu.get('change', '')}")
+            try:
+                char_name = cu.get("name", "") if isinstance(cu, dict) else str(cu)
+                if char_name:
+                    existing = fm.read_character(project, char_name)
+                    if existing:
+                        field = cu.get("field", "") if isinstance(cu, dict) else ""
+                        change = cu.get("change", "") if isinstance(cu, dict) else ""
+                        detail = cu.get("detail", "") if isinstance(cu, dict) else ""
+                        update_result = await char_skill(llm, fm, project, {
+                            "action": "update",
+                            "instruction": f"更新{field}：{change}，详情：{detail}",
+                            "char_name": char_name,
+                            "existing_content": existing,
+                        })
+                        if update_result.get("success"):
+                            fm.write_character(project, char_name, update_result["content"])
+                            changed_modules.add("人物设定")
+                            summary_parts.append(f"- {char_name}：{change}")
+            except Exception as e:
+                summary_parts.append(f"- 人物更新处理失败（{cu}）：{e}")
 
         # Process new locations
         new_locs = extracted.get("new_locations", [])
         for nl in new_locs:
-            summary_parts.append(f"- 新区域：{nl.get('name', '')}")
+            loc_name = nl.get("name", "") if isinstance(nl, dict) else str(nl)
+            if loc_name:
+                summary_parts.append(f"- 新区域：{loc_name}")
 
         # Process new world info
         new_world = extracted.get("new_world_info", {})
-        if new_world.get("new_rules") or new_world.get("new_items") or new_world.get("new_powers") or new_locs:
-            existing_world = fm.read_world_setting(project) or ""
-            world_result = await world_skill(llm, fm, project, {
-                "action": "update",
-                "instruction": f"本章新增元素：{json.dumps(new_world, ensure_ascii=False)}",
-                "existing_content": existing_world,
-            })
-            if world_result.get("success"):
-                fm.write_world_setting(project, world_result["content"])
-                changed_modules.add("世界设定")
+        if isinstance(new_world, dict) and (new_world.get("new_rules") or new_world.get("new_items") or new_world.get("new_powers") or new_locs):
+            try:
+                existing_world = fm.read_world_setting(project) or ""
+                world_result = await world_skill(llm, fm, project, {
+                    "action": "update",
+                    "instruction": f"本章新增元素：{json.dumps(new_world, ensure_ascii=False)}",
+                    "existing_content": existing_world,
+                })
+                if world_result.get("success"):
+                    fm.write_world_setting(project, world_result["content"])
+                    changed_modules.add("世界设定")
+                    summary_parts.append("- 世界设定已更新")
+            except Exception as e:
+                summary_parts.append(f"- 世界设定更新失败：{e}")
 
         # Process new events → update story timeline
         new_events = extracted.get("new_events", [])
         if new_events:
-            timeline_result = await timeline_skill(llm, fm, project, {
-                "action": "add_event",
-                "instruction": f"添加以下事件：{json.dumps(new_events, ensure_ascii=False)}",
-                "existing_bg": fm.read_background_timeline(project),
-                "existing_story": fm.read_story_timeline(project),
-            })
-            if timeline_result.get("success"):
-                if timeline_result.get("story"):
-                    fm.write_story_timeline(project, timeline_result["story"])
-                if timeline_result.get("background"):
-                    fm.write_background_timeline(project, timeline_result["background"])
-                changed_modules.add("时间线")
+            try:
+                timeline_result = await timeline_skill(llm, fm, project, {
+                    "action": "add_event",
+                    "instruction": f"添加以下事件：{json.dumps(new_events, ensure_ascii=False)}",
+                    "existing_bg": fm.read_background_timeline(project),
+                    "existing_story": fm.read_story_timeline(project),
+                })
+                if timeline_result.get("success"):
+                    if timeline_result.get("story"):
+                        fm.write_story_timeline(project, timeline_result["story"])
+                        summary_parts.append("- 故事时间线已更新")
+                    if timeline_result.get("background"):
+                        fm.write_background_timeline(project, timeline_result["background"])
+                    changed_modules.add("时间线")
+                else:
+                    summary_parts.append(f"- 时间线更新失败：{timeline_result.get('error')}")
+            except Exception as e:
+                summary_parts.append(f"- 时间线更新失败：{e}")
 
         # Process relationship changes
         rel_changes = extracted.get("relationship_changes", [])
         if rel_changes:
-            existing_rel = fm.read_relationship(project) or ""
-            rel_result = await rel_skill(llm, fm, project, {
-                "action": "update",
-                "instruction": f"关系变化：{json.dumps(rel_changes, ensure_ascii=False)}",
-                "existing_content": existing_rel,
-            })
-            if rel_result.get("success"):
-                fm.write_relationship(project, rel_result["content"])
-                changed_modules.add("人物关系")
+            try:
+                existing_rel = fm.read_relationship(project) or ""
+                rel_result = await rel_skill(llm, fm, project, {
+                    "action": "update",
+                    "instruction": f"关系变化：{json.dumps(rel_changes, ensure_ascii=False)}",
+                    "existing_content": existing_rel,
+                })
+                if rel_result.get("success"):
+                    fm.write_relationship(project, rel_result["content"])
+                    changed_modules.add("人物关系")
+                    summary_parts.append("- 人物关系已更新")
+            except Exception as e:
+                summary_parts.append(f"- 人物关系更新失败：{e}")
 
         # Process foreshadowing
         new_fbs = extracted.get("new_foreshadowing", [])
@@ -261,6 +333,12 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             for c in conflicts:
                 summary_parts.append(f"- ⚠️ {c.get('description', '')}（严重程度：{c.get('severity', '')}）")
 
+        # Final stats
+        if changed_modules:
+            summary_parts.append(f"\n## 更新统计\n已修改模块：{', '.join(sorted(changed_modules))}")
+        else:
+            summary_parts.append(f"\n## 更新统计\n> 无模块被修改。")
+
         summary = "\n".join(summary_parts)
 
         # Update version numbers only for changed modules
@@ -280,7 +358,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             "result": {
                 "summary": summary,
                 "extracted": extracted,
-                "full_analysis": result.get("content", ""),
+                "full_analysis": raw_response,
             },
         }
     except Exception as e:

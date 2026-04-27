@@ -6,16 +6,27 @@
 
 ## v0.1.1 (2026-04-27)
 
-### Bug 修复
+### Bug 修复 — 知识同步引擎无法正常工作
 
-**知识同步引擎多项 Bug（测试中发现）**
+**问题：** 章节生成后知识同步无输出，创作依据不更新，更新摘要为空。
 
-- **修复缺少 `import json` 导致的崩溃：** `app/skills/knowledge_sync.py` 在模块顶层添加 `import json`，解决 fan-out 阶段 `NameError: name 'json' is not defined` 崩溃问题
-- **同步失败前端可见：** `app/api/chapters.py` 两处同步调用添加 else 分支，失败时通过 SSE 推送 error 事件给前端
-- **JSON 解析器增强：** `app/services/llm.py` 的 `_parse_json_response()` 重写为三策略回退解析器，支持 `---JSON---` 标记、\`\`\`json 代码块、以及任意 \`\`\` 代码块
-- **增大同步 max_tokens：** knowledge_sync 调用从 4096 提升至 8192，避免长章节输出截断
-- **SYSTEM_PROMPT 强化：** 明确要求使用 \`\`\`json 代码块格式，而非自定义标记
+**根因分析：**
+1. `knowledge_sync.py` 缺少 `import json`，fan-out 阶段触发 `NameError` 崩溃
+2. `chapters.py` 同步失败时静默忽略，前端无提示
+3. `llm.py` JSON 解析器仅支持 `---JSON---` 自定义标记，多数 LLM 输出 \`\`\`json 代码块或裸 JSON，解析失败
+4. sync 调用 `max_tokens=4096` 不足以容纳长章节的分析 + JSON
+5. `timeline.py` 时间线拆分仅匹配精确标题字符串，格式变化即失败
+
+**修复内容：**
+
+- **添加 `import json`：** `app/skills/knowledge_sync.py` 模块顶层添加，修复 fan-out 阶段崩溃
+- **同步失败前端可见：** `app/api/chapters.py` 两处同步调用添加 else 分支，失败时通过 SSE 推送 error 事件
+- **JSON 解析器四策略回退：** `app/services/llm.py` 的 `_parse_json_response()` 支持：① `---JSON---` 标记 ② \`\`\`json 代码块 ③ 任意 \`\`\` 代码块 ④ 裸 `{...}` JSON 对象（平衡括号扫描）
+- **增大同步 max_tokens：** knowledge_sync 调用从 4096 提升至 8192
+- **SYSTEM_PROMPT 强化：** 要求 LLM 主动提取（"宁可多提取，不要遗漏"），明确禁止所有字段为空，要求使用 \`\`\`json 代码块格式
 - **时间线拆分容错增强：** `app/skills/timeline.py` 拆分逻辑增加多种标题变体回退，最终兜底返回全部内容为故事时间线
+- **调试诊断支持：** 同步原始响应自动保存至 `项目目录/调试/同步原始响应_第X章.txt`，便于排查 LLM 输出问题
+- **摘要内容丰富化：** 更新摘要现包含章节字数、已有设定数、AI 文字分析、提取数据概览（各字段项目数）、更新统计
 
 **涉及文件：**
 - `app/skills/knowledge_sync.py`
