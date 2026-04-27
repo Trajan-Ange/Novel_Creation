@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小说创作管理系统</title>
+<link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/editor.css">
+<link rel="stylesheet" href="/css/chat.css?v=3">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<div id="app">
+  <header id="header">
+    <h1>小说创作管理系统</h1>
+    <div id="header-actions">
+      <span id="project-indicator">未选择项目</span>
+      <button id="btn-config" class="btn-icon" title="API 配置">⚙</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <nav id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">项目</div>
+        <ul id="nav-projects"></ul>
+      </div>
+      <div class="sidebar-section" id="sidebar-project-nav" style="display:none">
+        <div class="sidebar-title">创作功能</div>
+        <ul>
+          <li data-section="dashboard">项目概览</li>
+          <li data-section="settings">创作依据</li>
+          <li data-section="outline">大纲管理</li>
+          <li data-section="writing">章节写作</li>
+          <li data-section="foreshadowing">伏笔管理</li>
+          <li data-section="query">智能查询</li>
+        </ul>
+      </div>
+    </nav>
+
+    <main id="content">
+      <!-- Dynamic content loaded here -->
+    </main>
+  </div>
+</div>
+
+<!-- Config Modal -->
+<div id="config-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>API 配置</h2>
+      <button class="btn-close" onclick="closeConfig()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>API 密钥</label>
+        <input type="password" id="cfg-api-key" placeholder="sk-...">
+      </div>
+      <div class="form-group">
+        <label>API 地址 (Base URL)</label>
+        <input type="text" id="cfg-base-url" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="form-group">
+        <label>模型名称</label>
+        <input type="text" id="cfg-model" placeholder="gpt-4o">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>温度 (Temperature)</label>
+          <input type="number" id="cfg-temperature" min="0" max="2" step="0.1" value="0.7">
+        </div>
+        <div class="form-group">
+          <label>最大 Token 数</label>
+          <input type="number" id="cfg-max-tokens" min="100" max="16384" step="100" value="4096">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="cfg-status"></span>
+      <button class="btn btn-secondary" id="cfg-test-btn" onclick="testConnection()">测试连接</button>
+      <button class="btn btn-primary" id="cfg-save-btn" onclick="saveConfig()">保存配置</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Project Modal -->
+<div id="project-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>创建新项目</h2>
+      <button class="btn-close" onclick="closeProjectModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>项目名称</label>
+        <input type="text" id="proj-name" placeholder="输入小说名称">
+      </div>
+      <div class="form-group">
+        <label>项目描述</label>
+        <textarea id="proj-desc" rows="4" placeholder="描述你想创作的小说世界观、类型、风格等..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>创作类型</label>
+        <select id="proj-type">
+          <option value="原创">原创</option>
+          <option value="二创">二创（同人/衍生）</option>
+        </select>
+      </div>
+      <div class="form-group" id="lore-source-group" style="display:none">
+        <label>源作品名称</label>
+        <input type="text" id="lore-source" placeholder="例如：原神、哈利波特">
+        <small>AI 将根据对这部作品的了解来采集设定</small>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="createProject()">创建项目</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/utils/sse.js?v=2"></script>
+<script src="/js/api.js?v=2"></script>
+<script src="/js/state.js?v=2"></script>
+<script src="/js/components/config-panel.js?v=2"></script>
+<script src="/js/components/project-list.js?v=2"></script>
+<script src="/js/components/settings-editor.js?v=3"></script>
+<script src="/js/components/settings-chat.js?v=3"></script>
+<script src="/js/components/outline-tree.js?v=2"></script>
+<script src="/js/components/chapter-writer.js?v=2"></script>
+<script src="/js/components/foreshadowing.js?v=2"></script>
+<script src="/js/app.js?v=2"></script>
+
+</body>
+</html>

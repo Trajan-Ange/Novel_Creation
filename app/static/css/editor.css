@@ -1,0 +1,159 @@
+/* ── Markdown Editor ─────────────────────────────── */
+.markdown-editor {
+  display: flex; gap: 16px; height: calc(100vh - 180px);
+}
+.editor-pane {
+  flex: 1; display: flex; flex-direction: column;
+}
+.editor-pane h4 {
+  font-size: 13px; color: #999; margin-bottom: 8px; text-transform: uppercase;
+}
+.editor-pane textarea {
+  flex: 1; padding: 14px; border: 1px solid #ddd; border-radius: 6px;
+  font-family: "Consolas", "Microsoft YaHei", monospace; font-size: 14px;
+  line-height: 1.7; resize: none;
+}
+.editor-pane textarea:focus { outline: none; border-color: #4a90d9; }
+
+.preview-pane {
+  flex: 1; padding: 14px; border: 1px solid #eee; border-radius: 6px;
+  background: #fff; overflow-y: auto; line-height: 1.8;
+}
+
+/* ── Settings Tabs ───────────────────────────────── */
+.settings-tabs {
+  display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 16px;
+}
+.settings-tab {
+  padding: 10px 18px; cursor: pointer; font-size: 14px; color: #777;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.settings-tab:hover { color: #333; }
+.settings-tab.active { color: #4a90d9; border-bottom-color: #4a90d9; font-weight: 600; }
+
+.settings-toolbar {
+  display: flex; gap: 8px; margin-bottom: 14px; align-items: center;
+}
+.settings-toolbar .btn { font-size: 13px; }
+
+/* ── Project Dashboard ───────────────────────────── */
+.dashboard-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.dashboard-card { background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.dashboard-card h4 { font-size: 13px; color: #999; margin-bottom: 8px; }
+.dashboard-card .value { font-size: 22px; font-weight: 600; color: #2c3e50; }
+.dashboard-card .sub { font-size: 12px; color: #aaa; margin-top: 4px; }
+
+/* ── Outline Tree ────────────────────────────────── */
+.outline-tree { padding-left: 0; }
+.outline-tree li { margin: 2px 0; }
+.outline-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 4px; cursor: pointer; font-size: 14px;
+}
+.outline-item:hover { background: #f0f4f8; }
+.outline-item.active { background: #e3edf7; color: #4a90d9; }
+.outline-item .icon { font-size: 12px; color: #999; width: 16px; text-align: center; }
+
+/* ── Foreshadowing Table ─────────────────────────── */
+.foreshadowing-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.foreshadowing-table th {
+  text-align: left; padding: 10px 12px; background: #f8f9fa;
+  border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #555; font-size: 13px;
+}
+.foreshadowing-table td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+.foreshadowing-table tr:hover td { background: #f8f9fa; }
+.status-pending { color: #e67e22; font-weight: 600; }
+.status-recovered { color: #27ae60; }
+.status-expired { color: #999; text-decoration: line-through; }
+
+/* ── Query Section ───────────────────────────────── */
+.query-input-area { display: flex; gap: 8px; margin-bottom: 16px; }
+.query-input-area input { flex: 1; }
+.query-result { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.query-result .sources { margin-top: 12px; font-size: 12px; color: #999; }
+
+/* ── Progress Steps ──────────────────────────────── */
+.progress-steps { margin: 16px 0; }
+.progress-step { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
+.progress-step .step-indicator { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+.step-running .step-indicator { background: #f0f4f8; }
+.step-done .step-indicator { background: #e8f8ef; color: #27ae60; }
+.step-error .step-indicator { background: #fde8e8; color: #c0392b; }
+
+/* ── Markdown Content ────────────────────────────── */
+.markdown-content h1 { font-size: 22px; margin: 16px 0 10px; }
+.markdown-content h2 { font-size: 18px; margin: 14px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+.markdown-content h3 { font-size: 16px; margin: 12px 0 6px; }
+.markdown-content p { margin: 8px 0; }
+.markdown-content ul, .markdown-content ol { margin: 8px 0; padding-left: 24px; }
+.markdown-content li { margin: 4px 0; }
+.markdown-content table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+.markdown-content th, .markdown-content td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; font-size: 13px; }
+.markdown-content th { background: #f8f9fa; }
+.markdown-content code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+.markdown-content pre { background: #2d2d2d; color: #f8f8f2; padding: 14px; border-radius: 6px; overflow-x: auto; margin: 10px 0; }
+.markdown-content pre code { background: none; padding: 0; color: inherit; }
+.markdown-content blockquote { border-left: 3px solid #4a90d9; padding: 6px 14px; color: #666; margin: 10px 0; background: #f8f9fa; }
+
+/* ── Creation Wizard ─────────────────────────────── */
+.wizard-progress {
+  display: flex; align-items: center; margin-bottom: 24px; padding: 16px 0;
+}
+.wizard-pip {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; background: #e8e8e8; color: #999;
+  flex-shrink: 0; position: relative; z-index: 1;
+  transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+.wizard-pip:not(:last-child) { margin-right: 60px; }
+.wizard-pip:not(:last-child)::after {
+  content: '';
+  position: absolute; top: 50%; left: 100%;
+  width: 60px; height: 2px; background: #ddd;
+  z-index: 0;
+}
+.wizard-pip-active {
+  background: #4a90d9; color: #fff; transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(74,144,217,0.4);
+}
+.wizard-pip-done {
+  background: #27ae60; color: #fff;
+}
+.wizard-pip-done:not(:last-child)::after {
+  background: #27ae60;
+}
+.wizard-pip-skipped {
+  background: #e0e0e0; color: #aaa;
+}
+
+.wizard-step-card { max-width: 800px; }
+.wizard-step-card textarea {
+  width: 100%; padding: 10px 14px; border: 1px solid #ddd;
+  border-radius: 6px; font-family: inherit; font-size: 14px;
+  line-height: 1.6; resize: vertical; min-height: 60px;
+}
+.wizard-step-card textarea:focus {
+  outline: none; border-color: #4a90d9;
+}
+.wizard-step-actions { display: flex; gap: 10px; margin-top: 12px; }
+
+/* ── Manual Editor ────────────────────────────────── */
+.manual-editor { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.manual-edit-textarea {
+  width: 100%; min-height: 400px; padding: 14px;
+  border: 1px solid #ddd; border-radius: 6px;
+  font-family: "Consolas", "Microsoft YaHei", monospace;
+  font-size: 14px; line-height: 1.7; resize: vertical;
+}
+.manual-edit-textarea:focus { outline: none; border-color: #4a90d9; }
+.manual-editor-actions { display: flex; gap: 8px; }
+
+/* ── Wizard Result ────────────────────────────────── */
+.wizard-result-content {
+  background: #f8f9fa; border-radius: 8px; padding: 16px;
+}

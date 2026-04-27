@@ -1,0 +1,69 @@
+/* ── Chapter Writing Chat Interface ──────────────── */
+.chat-container {
+  display: flex; flex-direction: column; height: calc(100vh - 160px);
+  background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 20px;
+}
+.chat-message {
+  margin-bottom: 16px; animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.chat-message.system { text-align: center; }
+.chat-message.system .content {
+  display: inline-block; padding: 6px 14px; background: #f0f0f0;
+  border-radius: 12px; font-size: 13px; color: #888;
+}
+.chat-message.user-message { text-align: right; }
+.chat-message.user-message .content {
+  display: inline-block; padding: 10px 16px; background: #4a90d9; color: #fff;
+  border-radius: 16px; max-width: 80%; text-align: left;
+}
+.chat-message.ai .content {
+  padding: 16px; background: #f8f9fa; border-radius: 8px;
+  border: 1px solid #eee; max-width: 85%;
+}
+.chat-message.outline .content {
+  padding: 16px; background: #edf2f9; border-radius: 8px;
+  border: 1px solid #d0ddf0; max-width: 90%;
+}
+.chat-message.text-chunk .content {
+  padding: 16px; background: #fff; border-radius: 8px;
+  border: 1px solid #eee; line-height: 1.9; font-size: 15px;
+}
+.chat-message.summary .content {
+  padding: 14px; background: #e8f8ef; border-radius: 8px;
+  border: 1px solid #c3e6d6; font-size: 13px;
+}
+
+.chat-message .label {
+  font-size: 11px; text-transform: uppercase; color: #999; margin-bottom: 4px;
+}
+.chat-input-area {
+  display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid #eee;
+  background: #fafafa; border-radius: 0 0 8px 8px;
+}
+.chat-input-area input {
+  flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 20px;
+  font-size: 14px;
+}
+.chat-input-area input:focus { outline: none; border-color: #4a90d9; }
+
+.chat-actions { display: flex; gap: 8px; margin-top: 10px; }
+.chapter-text-display {
+  padding: 24px; background: #fff; border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08); line-height: 1.9;
+  font-size: 15px; max-width: 800px; margin: 0 auto;
+}
+
+/* Streaming text cursor effect */
+.streaming-cursor::after {
+  content: "|"; animation: blink 0.8s infinite; color: #4a90d9;
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* Write controls */
+.write-controls { margin-bottom: 16px; }
+.write-controls .btn { margin-right: 8px; }
