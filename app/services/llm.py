@@ -167,20 +167,62 @@ class LLMService:
 
     @staticmethod
     def _parse_json_response(response: str) -> dict:
-        """Split response into markdown content and optional JSON block."""
+        """Split response into markdown content and optional JSON block.
+
+        Tries multiple extraction strategies in order:
+        1. '---JSON---' marker (custom format)
+        2. Last ```json / ``` code fence block (common LLM format)
+        3. Last ``` code fence block
+        """
         result = {"content": response, "json": None}
+
+        def _try_parse_json(json_str: str):
+            """Attempt to parse a string as JSON, returning the parsed object or None."""
+            try:
+                return json.loads(json_str)
+            except (json.JSONDecodeError, ValueError):
+                return None
+
+        # Strategy 1: ---JSON--- marker
         if "---JSON---" in response:
             parts = response.split("---JSON---", 1)
             result["content"] = parts[0].strip()
-            try:
-                json_str = parts[1].strip()
-                if json_str.startswith("```"):
-                    json_str = json_str.strip("`").strip()
-                    if json_str.startswith("json"):
-                        json_str = json_str[4:].strip()
-                result["json"] = json.loads(json_str)
-            except (json.JSONDecodeError, IndexError):
-                pass
+            json_str = parts[1].strip()
+            if json_str.startswith("```"):
+                json_str = json_str.strip("`").strip()
+                if json_str.startswith("json"):
+                    json_str = json_str[4:].strip()
+            parsed = _try_parse_json(json_str)
+            if parsed:
+                result["json"] = parsed
+                return result
+
+        # Strategy 2: Last ```json ... ``` block
+        json_fences = response.split("```json")
+        if len(json_fences) > 1:
+            last_block = json_fences[-1]
+            end = last_block.find("```")
+            if end != -1:
+                json_str = last_block[:end].strip()
+                parsed = _try_parse_json(json_str)
+                if parsed:
+                    result["json"] = parsed
+                    result["content"] = response[:response.rfind("```json")].strip()
+                    return result
+
+        # Strategy 3: Last ``` ... ``` block (try as JSON)
+        fences = response.split("```")
+        if len(fences) >= 3:  # At least one complete code block
+            for i in range(len(fences) - 2, 0, -2):  # Check code blocks from last to first
+                candidate = fences[i].strip()
+                if candidate.startswith("json"):
+                    candidate = candidate[4:].strip()
+                parsed = _try_parse_json(candidate)
+                if parsed:
+                    result["json"] = parsed
+                    result["content"] = response[:response.rfind("```" + fences[i][:min(len(fences[i]), 20)])].strip()
+                    return result
+
         return result
 
 

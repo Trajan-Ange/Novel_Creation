@@ -110,15 +110,26 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         bg_content = ""
         story_content = ""
         content = result.get("content", "")
-        if "背景时间线" in content:
+
+        if "# 故事时间线" in content:
+            parts = content.split("# 故事时间线", 1)
+            bg_content = parts[0].strip()
+            story_content = ("# 故事时间线" + parts[1]).strip()
+        elif "# 背景时间线" in content:
             parts = content.split("# 故事时间线", 1)
             bg_content = parts[0].strip() if parts else ""
             story_content = ("# 故事时间线" + parts[1]).strip() if len(parts) > 1 else ""
+        elif "故事时间线" in content:
+            parts = content.split("故事时间线", 1)
+            bg_content = parts[0].strip() if parts else ""
+            story_content = ("故事时间线" + parts[1]).strip() if len(parts) > 1 else ""
+        else:
+            story_content = content
 
         return {
             "success": True,
-            "background": bg_content or content,
-            "story": story_content,
+            "background": bg_content or None,
+            "story": story_content or None,
             "json": result.get("json"),
         }
     except Exception as e:

@@ -160,6 +160,8 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             })
             if sync_result.get("success"):
                 yield send("sync_summary", {"data": sync_result.get("result", {})})
+            else:
+                yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
 
             # Update project state
             state = fm.get_project_state(project)
@@ -263,6 +265,8 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                 })
                 if sync_result.get("success"):
                     yield send("sync_summary", {"data": sync_result.get("result", {})})
+                else:
+                    yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
 
                 # Update project state
                 state = fm.get_project_state(project)
