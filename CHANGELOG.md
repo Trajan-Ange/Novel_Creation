@@ -10,26 +10,30 @@
 
 **问题：** 章节生成后知识同步无输出，创作依据不更新，更新摘要为空。
 
-**根因分析：**
-1. `knowledge_sync.py` 缺少 `import json`，fan-out 阶段触发 `NameError` 崩溃
-2. `chapters.py` 同步失败时静默忽略，前端无提示
-3. `llm.py` JSON 解析器仅支持 `---JSON---` 自定义标记，多数 LLM 输出 \`\`\`json 代码块或裸 JSON，解析失败
-4. sync 调用 `max_tokens=4096` 不足以容纳长章节的分析 + JSON
-5. `timeline.py` 时间线拆分仅匹配精确标题字符串，格式变化即失败
+**最终根因（通过调试文件确认）：** LLM 输出被截断。模型在单一调用中需要同时输出详尽文字分析（~3000 tokens）和完整 JSON（16 条人物更新 + 3 个地点 + 9 个事件 + 关系 + 伏笔），远超 `max_tokens=8192`。JSON 块在中途截断 → `_parse_json_response` 只能找到残留的嵌套对象 → 解析结果只有一个 `relationship_changes` 元素 → 全流程无效。
 
-**修复内容：**
+**架构重构：** 从单次 LLM 调用改为 6 阶段流水线：
 
-- **添加 `import json`：** `app/skills/knowledge_sync.py` 模块顶层添加，修复 fan-out 阶段崩溃
-- **同步失败前端可见：** `app/api/chapters.py` 两处同步调用添加 else 分支，失败时通过 SSE 推送 error 事件
-- **JSON 解析器四策略回退：** `app/services/llm.py` 的 `_parse_json_response()` 支持：① `---JSON---` 标记 ② \`\`\`json 代码块 ③ 任意 \`\`\` 代码块 ④ 裸 `{...}` JSON 对象（平衡括号扫描）
-- **增大同步 max_tokens：** knowledge_sync 调用从 4096 提升至 8192
-- **SYSTEM_PROMPT 强化：** 要求 LLM 主动提取（"宁可多提取，不要遗漏"），明确禁止所有字段为空，要求使用 \`\`\`json 代码块格式
-- **时间线拆分容错增强：** `app/skills/timeline.py` 拆分逻辑增加多种标题变体回退，最终兜底返回全部内容为故事时间线
-- **调试诊断支持：** 同步原始响应自动保存至 `项目目录/调试/同步原始响应_第X章.txt`，便于排查 LLM 输出问题
-- **摘要内容丰富化：** 更新摘要现包含章节字数、已有设定数、AI 文字分析、提取数据概览（各字段项目数）、更新统计
+| 阶段 | 调用 | max_tokens | 输出 |
+|------|------|------------|------|
+| Phase 1: 文字分析 | 1 次 | 4096 | 纯文字创作要素分析报告 |
+| Phase 2a: 人物提取 | 1 次 | 8192 | `{new_characters, character_updates}` |
+| Phase 2b: 事件提取 | 1 次 | 4096 | `{new_events}` |
+| Phase 2c: 世界提取 | 1 次 | 4096 | `{new_locations, new_world_info}` |
+| Phase 2d: 关系提取 | 1 次 | 4096 | `{relationship_changes}` |
+| Phase 2e: 伏笔提取 | 1 次 | 4096 | `{new_foreshadowing, recovered}` |
+
+每个分类提取仅接收文字分析作为上下文（非完整章节），配合领域专属的简化 JSON schema，确保单次输出不超 token 限制。
+
+**其他修复：**
+- **JSON 解析器四策略回退：** 支持 `---JSON---` 标记 / \`\`\`json 代码块 / 任意 \`\`\` 代码块 / 裸 `{...}` JSON 对象（遍历所有平衡括号对，选键最多者）
+- **时间线拆分容错增强：** `app/skills/timeline.py` 增加多种标题变体回退
+- **同步失败前端可见：** `app/api/chapters.py` 失败时通过 SSE 推送 error 事件
+
+**调试支持：** 每阶段独立保存调试文件（`同步_01_文字分析_第X章.txt` ~ `同步_07_更新报告_第X章.txt`），可精确定位问题阶段。
 
 **涉及文件：**
-- `app/skills/knowledge_sync.py`
+- `app/skills/knowledge_sync.py`（重写）
 - `app/services/llm.py`
 - `app/api/chapters.py`
 - `app/skills/timeline.py`
