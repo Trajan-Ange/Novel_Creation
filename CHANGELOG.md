@@ -1,8 +1,8 @@
-# Changelog
+# 更新日志 (Changelog)
 
-All notable changes to this project will be documented in this file.
+本文件记录项目的所有重要变更。
 
-This project adheres to [Semantic Versioning](https://semver.org/).
+本项目遵循[语义化版本控制](https://semver.org/lang/zh-CN/)：`v主版本.次版本.修订号`
 
 ---
 

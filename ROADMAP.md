@@ -1,94 +1,94 @@
-# Roadmap
+# 版本路线图 (Roadmap)
 
-## Completed
+## 已完成
 
-### v0.1.2 — Streaming Fix & Chapter Management (2026-04-28)
+### v0.1.2 — 流式生成修复与章节管理（2026-04-28）
 
-- **Critical Fix**: DeepSeek V4 reasoning phase blocked streaming output — `_chat_stream()` now yields reasoning chunks
-- **Critical Fix**: Knowledge sync stuck at event extraction — `max_tokens` raised to 8192, timeline context trimmed, 120s timeout
-- Chapter outline streaming generation
-- Knowledge sync streaming progress (SSE status events)
-- Chapter management system (`chapter-manager.js`)
-- Double input box bug fix
-- Reasoning content filtered from user-facing output
+- **严重修复**：DeepSeek V4 推理阶段阻塞流式输出 — `_chat_stream()` 现在正确 yield 推理内容
+- **严重修复**：知识同步在事件提取阶段卡住 — `max_tokens` 提升至 8192，时间线上下文精简，120s 超时
+- 章节大纲流式生成
+- 知识同步流式进度推送（SSE status 事件）
+- 章节管理系统（`chapter-manager.js`）
+- 双输入框 Bug 修复
+- 推理内容过滤（仅向用户展示实际内容，思维过程以状态事件替代）
 
-### v0.1.1 — Knowledge Sync Engine Fix (2026-04-27)
+### v0.1.1 — 知识同步引擎修复（2026-04-27）
 
-- **Architecture**: Single LLM call → 6-phase pipeline (text analysis + 5 domain extractions)
-- JSON parser: 4-strategy fallback (`---JSON---` / code blocks / balanced braces)
-- Timeline split tolerance: multiple heading variant fallbacks
-- Sync failure visible in frontend via SSE error events
-- Per-phase debug files for troubleshooting
+- **架构重构**：单一 LLM 调用 → 6 阶段流水线（文字分析 + 5 个领域独立提取）
+- JSON 解析器：四策略回退（`---JSON---` / 代码块 / 平衡花括号）
+- 时间线拆分容错：多种标题变体回退
+- 同步失败前端可见（SSE error 事件推送）
+- 每阶段独立调试文件，可精确定位问题
 
-### v0.1.0 — Security & Stability (2026-04-27)
+### v0.1.0 — 安全与稳定性（2026-04-27）
 
-- Path traversal vulnerability fix in `file_manager.py`
-- HTTP status codes normalized across 6 API files
-- Foreshadowing ID collision fix
-- LLM retry with exponential backoff (RateLimit/Timeout/Connection/500)
-- SSE client disconnect detection
-- Dead code removal (328+141 lines)
-- Duplicate code consolidation (SSE helpers, `escapeHtml`)
-- Removed unused `aiofiles` dependency
+- 路径遍历漏洞修复（`file_manager.py`）
+- HTTP 状态码规范化（6 个 API 文件）
+- 伏笔 ID 碰撞修复
+- LLM 指数退避重试（RateLimit/Timeout/Connection/500）
+- SSE 客户端断连检测
+- 死代码清理（共 469 行）
+- 重复代码合并（SSE 辅助函数、`escapeHtml`）
+- 移除未使用依赖 `aiofiles`
 
-### v0.0.1 — Initial Release (2026-04-27)
+### v0.0.1 — 首次发布（2026-04-27）
 
-- Project management (create/delete/list)
-- Creation basis management (world, characters, timeline, relationships, style)
-- Three-level outline generation
-- SSE streaming chapter writing with interactive feedback
-- Knowledge sync engine (basic)
-- Foreshadowing management
-- Chat-based setting creation
-- Fan-fiction lore extraction
-
----
-
-## Next (v0.2.0) — Quality & Completeness
-
-### Security
-- [ ] API Key environment variable support (`NOVEL_LLM_API_KEY`)
-- [ ] Atomic file writes (temp file + rename)
-- [ ] Error message sanitization (don't leak stack traces)
-
-### Bug Fixes
-- [ ] N+1 query optimization in outline tree loading
-- [ ] Character name extraction robustness
-- [ ] Character heading recognition (h1/h2)
-- [ ] Context-aware truncation (paragraph boundaries)
-
-### Architecture
-- [ ] Project-level concurrency safety (`asyncio.Lock`)
-- [ ] Token counting & context window budget management
-
-### Quality
-- [ ] Basic test coverage (pytest + httpx)
-- [ ] Structured logging (replace `print`)
-- [ ] SSE auto-reconnect with exponential backoff
-
-### Features
-- [ ] Project export/import (zip archive)
-- [ ] Project rename
+- 项目管理（创建/删除/列表）
+- 创作依据管理（世界观、人物、时间线、人物关系、风格指南）
+- 三级大纲生成
+- SSE 流式章节撰写 + 交互式反馈
+- 知识同步引擎（基础版）
+- 伏笔管理
+- 对话式设定创建
+- 二创世界观提取
 
 ---
 
-## Future (v0.3.0+)
+## 下一批（v0.2.0）— 功能完善与体验提升
 
-### Enhanced Experience
-- [ ] Version snapshots (restore previous setting versions)
-- [ ] Conflict detection (new content vs. existing settings)
-- [ ] Knowledge graph visualization (relationship graph, timeline view)
-- [ ] Dark mode
-- [ ] Monaco Editor integration for Markdown editing
-- [ ] Keyboard shortcuts
+### 安全
+- [ ] API Key 环境变量支持（`NOVEL_LLM_API_KEY`）
+- [ ] 原子写入（临时文件 + 重命名）
+- [ ] 错误信息脱敏（不泄露堆栈信息）
 
-### Advanced Features
-- [ ] Multi-model configuration (cheap model for outlines, strong model for chapters)
-- [ ] RAG knowledge base for fan-fiction (upload source material documents)
-- [ ] Batch chapter generation
-- [ ] Revision mode (partial chapter edits)
-- [ ] Mobile responsive layout
+### 缺陷修复
+- [ ] 大纲树加载 N+1 查询优化
+- [ ] 人物名称提取鲁棒性增强
+- [ ] 角色标题识别（h1/h2 均支持）
+- [ ] 上下文智能截断（按段落边界）
+
+### 架构
+- [ ] 项目级并发安全（`asyncio.Lock`）
+- [ ] Token 计数与上下文窗口预算管理
+
+### 工程质量
+- [ ] 基础测试覆盖（pytest + httpx）
+- [ ] 结构化日志（替换 `print`）
+- [ ] SSE 自动重连（指数退避）
+
+### 功能
+- [ ] 项目导出/导入（zip 打包）
+- [ ] 项目重命名
 
 ---
 
-*Last updated: 2026-04-28*
+## 远期（v0.3.0+）— 体验打磨与高级功能
+
+### 体验增强
+- [ ] 版本快照（可回退到历史设定版本）
+- [ ] 冲突检测（新增内容与已有设定的自动扫描）
+- [ ] 知识图谱可视化（人物关系图、时间线图）
+- [ ] 暗色模式
+- [ ] Monaco Editor 集成（Markdown 编辑）
+- [ ] 键盘快捷键
+
+### 高级功能
+- [ ] 多模型配置（便宜模型做大纲，强力模型写正文）
+- [ ] RAG 知识库（用户上传原作资料文档）
+- [ ] 批量章节生成
+- [ ] 修订模式（对已写章节局部修改）
+- [ ] 移动端适配
+
+---
+
+*最后更新：2026-04-28*

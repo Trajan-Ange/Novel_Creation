@@ -1,46 +1,46 @@
-# Novel Creation System
+# 小说创作管理系统
 
-AI-assisted novel creation management system — from worldbuilding and character design to outline planning and chapter writing.
+AI 辅助小说创作管理工具 — 从世界观构建、人物设计到大纲规划、正文撰写的全流程支持。
 
-![Version](https://img.shields.io/badge/version-0.1.2-blue)
+![版本](https://img.shields.io/badge/版本-0.1.2-blue)
 ![Python](https://img.shields.io/badge/python-3.10+-green)
-![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![许可证](https://img.shields.io/badge/许可证-MIT-lightgrey)
 
-**Tech Stack:** Python/FastAPI + Vanilla JavaScript SPA + File-based Storage (Markdown + JSON)
-
----
-
-## Features
-
-- **Project Management** — Create/delete projects, support original and fan-fiction types
-- **Creation Basis** — World settings, character profiles, timeline, character relationships, style guide
-- **Three-level Outlines** — Book → Volume → Chapter outline generation
-- **Chapter Writing** — SSE streaming generation with interactive feedback loop
-- **Knowledge Sync Engine** — Auto-extract entities, events, and changes after each chapter; update all setting files
-- **Foreshadowing Management** — Plant → Track → Reveal → Recover full lifecycle
-- **Chat-based Setting Creation** — Multi-turn interview-style generation of creation basis
-- **Fan-fiction Support** — Extract original work worldbuilding via LLM knowledge
+**技术栈：** Python/FastAPI + 原生 JavaScript SPA + 文件系统存储（Markdown + JSON）
 
 ---
 
-## Quick Start
+## 功能特性
 
-### Prerequisites
+- **项目管理** — 创建/删除/列表，支持原创与二创两种类型
+- **创作依据管理** — 世界观、人物设定、时间线、人物关系、风格指南
+- **三级大纲生成** — 全书大纲 → 卷大纲 → 章节大纲
+- **章节撰写** — SSE 流式生成 + 交互式反馈修改
+- **知识同步引擎** — 每章完成后自动提取实体、事件、变更，更新所有设定文件
+- **伏笔管理** — 埋设 → 追踪 → 揭示 → 回收，全生命周期管理
+- **对话式设定创建** — 多轮 AI 访谈交互式生成创作依据
+- **二创支持** — 基于 LLM 训练知识的原作世界观提取
+
+---
+
+## 快速开始
+
+### 环境要求
 
 - Python 3.10+
-- A compatible LLM API (DeepSeek, OpenAI, Ollama, vLLM, etc.)
+- 兼容 OpenAI 协议的 LLM API（DeepSeek、OpenAI、Ollama、vLLM 等）
 
-### Installation
+### 安装
 
 ```bash
-git clone <repo-url>
+git clone <仓库地址>
 cd Novel_Creation
 pip install -r requirements.txt
 ```
 
-### Configuration
+### 配置
 
-Edit `config.json` or use the in-app settings panel:
+编辑 `config.json` 或通过界内设置面板配置：
 
 ```json
 {
@@ -52,147 +52,148 @@ Edit `config.json` or use the in-app settings panel:
 }
 ```
 
-### Launch
+### 启动
 
 ```bash
 python main.py
-# Or double-click 启动.bat (Windows)
+# 或双击 启动.bat（Windows）
 ```
 
-Open **http://127.0.0.1:8000** in your browser.
+浏览器访问 **http://127.0.0.1:8000**
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```
 Novel_Creation/
-├── main.py                    # FastAPI entry point
-├── config.json                # LLM configuration (gitignored)
-├── requirements.txt           # Python dependencies
+├── main.py                    # FastAPI 入口，注册路由，挂载静态文件
+├── config.json                # LLM 配置文件（gitignored）
+├── requirements.txt           # Python 依赖
+├── 启动.bat                   # Windows 一键启动脚本
 ├── app/
-│   ├── api/                   # REST API + SSE endpoints
-│   │   ├── config.py          # LLM config CRUD + connection test
-│   │   ├── projects.py        # Project CRUD
-│   │   ├── settings.py        # Creation basis CRUD + streaming generate + chat
-│   │   ├── outline.py         # Outline CRUD + generation
-│   │   ├── chapters.py        # Chapter generation pipeline (SSE) + foreshadowing
-│   │   ├── sync.py            # Knowledge sync + lore extraction
-│   │   └── utils/             # SSE helper utilities
+│   ├── api/                   # REST API + SSE 端点
+│   │   ├── config.py          # LLM 配置 CRUD + 连接测试
+│   │   ├── projects.py        # 项目 CRUD
+│   │   ├── settings.py        # 创作依据 CRUD + 流式生成 + 对话式创建
+│   │   ├── outline.py         # 大纲 CRUD + 生成
+│   │   ├── chapters.py        # 章节生成流水线（SSE）+ 伏笔管理
+│   │   ├── sync.py            # 知识同步 + 世界观提取
+│   │   └── utils/             # SSE 辅助工具
 │   ├── services/
-│   │   └── llm.py             # LLMService: OpenAI-compatible client wrapper
-│   ├── skills/                # AI skill modules (SYSTEM_PROMPT + run function)
-│   │   ├── world_design.py    # World setting
-│   │   ├── character_design.py# Character design
-│   │   ├── timeline.py        # Timeline
-│   │   ├── relationship.py    # Character relationships
-│   │   ├── outline.py         # Outline generation (3 levels)
-│   │   ├── chapter_write.py   # Chapter writing
-│   │   ├── knowledge_sync.py  # Knowledge sync (6-phase pipeline)
-│   │   ├── lore_extract.py    # IP extraction (fan-fiction)
-│   │   └── writing_assist.py  # Memory search, style management, pre-write checks
+│   │   └── llm.py             # LLMService：OpenAI 兼容客户端封装
+│   ├── skills/                # AI 技能模块（SYSTEM_PROMPT + run 函数）
+│   │   ├── world_design.py    # 世界设定
+│   │   ├── character_design.py# 人物设定
+│   │   ├── timeline.py        # 时间线
+│   │   ├── relationship.py    # 人物关系
+│   │   ├── outline.py         # 大纲生成（全书/卷/章节三级）
+│   │   ├── chapter_write.py   # 正文撰写
+│   │   ├── knowledge_sync.py  # 知识同步（6 阶段流水线）
+│   │   ├── lore_extract.py    # 世界观提取（二创用）
+│   │   └── writing_assist.py  # 记忆搜索、风格管理、写前检查
 │   ├── storage/
-│   │   └── file_manager.py    # File manager: all read/write operations
-│   └── static/                # Frontend (vanilla JS SPA)
+│   │   └── file_manager.py    # 文件管理器：所有读写操作
+│   └── static/                # 前端（原生 JS SPA）
 │       ├── index.html
 │       ├── css/
 │       └── js/
-│           ├── utils/         # SSE client, API client, helpers
+│           ├── utils/         # SSE 客户端、API 客户端、辅助函数
 │           ├── api.js, state.js, app.js
-│           └── components/    # UI components (7 panels)
-└── projects/                  # Project data (one subdirectory per project)
-    └── <project-name>/
+│           └── components/    # UI 组件（7 个面板）
+└── projects/                  # 项目数据（每个项目一个子目录）
+    └── <项目名称>/
         ├── 项目状态.json
-        ├── 创作依据/           # World, characters, timeline, relationships, style guide
-        ├── 大纲/               # Book → Volume → Chapter outlines
-        ├── 正文/               # Written chapters
-        └── 伏笔管理/           # Foreshadowing tracking
+        ├── 创作依据/           # 世界观、人物、时间线、人物关系、风格指南
+        ├── 大纲/               # 全书 → 卷 → 章节大纲
+        ├── 正文/               # 已撰写章节
+        └── 伏笔管理/           # 伏笔追踪
 ```
 
 ---
 
-## API Endpoints
+## API 端点速查
 
-### Health
+### 健康检查
 ```
 GET /api/health
 ```
 
-### Config (`/api/config`)
+### 配置 (`/api/config`)
 ```
-GET  /              Get config (key masked)
-PUT  /              Update config
-POST /test          Test LLM connection
-```
-
-### Projects (`/api/projects`)
-```
-GET    /            List projects
-POST   /            Create project
-DELETE /{name}      Delete project
+GET  /              获取配置（Key 脱敏）
+PUT  /              更新配置
+POST /test          测试 LLM 连接
 ```
 
-### Settings (`/api/settings`)
+### 项目 (`/api/projects`)
 ```
-GET  /{project}/all                     Get all settings (for LLM context)
-GET  /{project}/world                   Get world setting
-GET  /{project}/characters              List characters
-POST /{project}/characters/generate     AI generate character
-PUT  /{project}/characters/{name}       Save character
-GET  /{project}/timeline                Get timeline
-GET  /{project}/relationship            Get relationships
-POST /stream-generate                   SSE: one-shot streaming generate
-POST /chat-generate                     SSE: interactive chat creation
+GET    /            列出所有项目
+POST   /            创建项目
+DELETE /{name}      删除项目
 ```
 
-### Outline (`/api/outline`)
+### 创作依据 (`/api/settings`)
 ```
-GET  /{project}/book                           Get book outline
-POST /{project}/book/generate                  Generate book outline
-GET  /{project}/volume/{vol}                   Get volume outline
-POST /{project}/volume/{vol}/generate          Generate volume outline
-GET  /{project}/volume/{vol}/chapter/{ch}      Get chapter outline
-POST /{project}/volume/{vol}/chapter/{ch}/generate  Generate chapter outline
-```
-
-### Chapters (`/api/chapters`)
-```
-GET  /{project}/volume/{vol}               List chapters
-GET  /{project}/volume/{vol}/chapter/{ch}  Get chapter content
-POST /generate                             SSE: full chapter writing pipeline
-POST /feedback                             SSE: outline confirmation / revision
-POST /query                                Memory search
-GET  /{project}/foreshadowing              Get foreshadowing list
+GET  /{project}/all                     获取所有设定（供 LLM 上下文用）
+GET  /{project}/world                   获取世界设定
+GET  /{project}/characters              列出角色名
+POST /{project}/characters/generate     AI 生成角色
+PUT  /{project}/characters/{name}       保存角色
+GET  /{project}/timeline                获取时间线
+GET  /{project}/relationship            获取人物关系
+POST /stream-generate                   SSE：一次性流式生成
+POST /chat-generate                     SSE：交互式对话创建
 ```
 
-### Sync (`/api/sync`)
+### 大纲 (`/api/outline`)
 ```
-POST /{project}/trigger        Manual knowledge sync
-POST /{project}/lore-extract   Extract worldbuilding from known IP
+GET  /{project}/book                           获取全书大纲
+POST /{project}/book/generate                  生成全书大纲
+GET  /{project}/volume/{vol}                   获取卷大纲
+POST /{project}/volume/{vol}/generate          生成卷大纲
+GET  /{project}/volume/{vol}/chapter/{ch}      获取章节大纲
+POST /{project}/volume/{vol}/chapter/{ch}/generate  生成章节大纲
+```
+
+### 正文 (`/api/chapters`)
+```
+GET  /{project}/volume/{vol}               列出已写章号
+GET  /{project}/volume/{vol}/chapter/{ch}  获取章节内容
+POST /generate                             SSE：完整章节撰写流水线
+POST /feedback                             SSE：大纲确认/修改反馈
+POST /query                                记忆搜索
+GET  /{project}/foreshadowing              获取伏笔清单
+```
+
+### 同步 (`/api/sync`)
+```
+POST /{project}/trigger        手动触发知识同步
+POST /{project}/lore-extract   从已知 IP 提取世界观
 ```
 
 ---
 
-## Core Architecture
+## 核心架构
 
-### Knowledge Sync (6-Phase Pipeline)
+### 知识同步引擎（6 阶段流水线）
 
-The core innovation. After each chapter is written, the knowledge sync engine automatically:
+每章写完后自动执行，核心创新机制：
 
 ```
-Phase 1: Text Analysis  →  Pure-text creative element analysis
-Phase 2a: Character Extraction  →  New characters + character updates
-Phase 2b: Event Extraction  →  New timeline events
-Phase 2c: World Extraction  →  New locations + world info
-Phase 2d: Relationship Extraction  →  Relationship changes
-Phase 2e: Foreshadowing Extraction  →  New + recovered foreshadowing
-Phase 3: Step-by-step updates  →  Apply changes to each setting file
-Phase 4: Update Report  →  Generate human-readable summary
+阶段 1：文字分析  →  纯文字创作要素分析报告
+阶段 2a：人物提取  →  新人物 + 人物状态更新
+阶段 2b：事件提取  →  新时间线事件
+阶段 2c：世界提取  →  新地点 + 世界信息
+阶段 2d：关系提取  →  人物关系变化
+阶段 2e：伏笔提取  →  新伏笔 + 已回收伏笔
+阶段 3：分步更新  →  将变更写入各设定文件
+阶段 4：更新报告  →  生成人类可读的更新摘要
 ```
 
-### SSE Streaming Format
+### SSE 流式传输通用格式
 
-All SSE endpoints use a consistent message format:
+所有 SSE 端点返回统一的消息格式：
 
 ```
 data: {"type":"status","message":"..."}
@@ -203,25 +204,25 @@ data: {"type":"error","message":"..."}
 
 ---
 
-## Troubleshooting
+## 常见问题排查
 
-| Problem | Solution |
-|---------|----------|
+| 问题 | 解决方法 |
+|------|----------|
 | `ModuleNotFoundError` | `pip install -r requirements.txt` |
-| LLM call fails | Check `config.json` API key and base URL; use the "Test Connection" button in UI |
-| SSE connection hangs | Verify LLM responds normally via `/api/config/test`; check server logs |
-| Port 8000 occupied | `netstat -ano \| findstr 8000` then `taskkill /PID <PID> /F` |
+| LLM 调用失败 | 检查 `config.json` 中的 API Key 和 Base URL；使用界面内"测试连接"按钮验证 |
+| SSE 连接卡住 | 先用 `/api/config/test` 确认 LLM 正常响应；查看服务器终端日志 |
+| 端口 8000 被占用 | `netstat -ano \| findstr 8000` 然后 `taskkill /PID <进程号> /F` |
 
 ---
 
-## Links
+## 相关文档
 
-- [Changelog](CHANGELOG.md)
-- [Roadmap](ROADMAP.md)
-- [Design Specification](docs/design-spec.md)
+- [更新日志](CHANGELOG.md)
+- [版本路线图](ROADMAP.md)
+- [设计规格说明](docs/design-spec.md)
 
 ---
 
-## License
+## 许可证
 
 MIT

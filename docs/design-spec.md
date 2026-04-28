@@ -1,10 +1,10 @@
-# Design Specification — Novel Creation & Management System
+# 设计规格说明 — 小说创作与管理系统
 
-**Doc Version**: v2.0
-**Created**: 2026-04-26
-**Last Updated**: 2026-04-28
+**文档版本**：v2.0
+**创建日期**：2026-04-26
+**最后更新**：2026-04-28
 
-> This is the original design specification for the project. See [ROADMAP.md](../ROADMAP.md) for current implementation status and planned work.
+> 本文件为项目的原始设计规格说明。当前实现进度与规划请参见 [ROADMAP.md](../ROADMAP.md)。
 
 ---
 
