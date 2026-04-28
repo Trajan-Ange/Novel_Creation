@@ -51,6 +51,13 @@ document.getElementById('context-menu').addEventListener('click', (e) => {
   }
 });
 
+// Click project indicator to return to project list
+document.getElementById('project-indicator').addEventListener('click', () => {
+  if (AppState.currentProject) {
+    setProject(null);
+  }
+});
+
 document.getElementById('btn-config').addEventListener('click', () => {
   if (typeof openConfig === 'function') openConfig();
 });

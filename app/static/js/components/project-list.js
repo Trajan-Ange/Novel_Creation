@@ -378,7 +378,7 @@ async function renderProjectList() {
       </div>`;
     } else {
       listEl.innerHTML = projects.map(p => `
-        <div class="card" style="cursor:pointer;position:relative" onclick="setProject('${p.name}')">
+        <div class="card project-card" style="cursor:pointer;position:relative" onclick="setProject('${p.name}')" data-project="${p.name}">
           <button class="btn btn-danger btn-sm" style="position:absolute;top:12px;right:12px;z-index:1" onclick="event.stopPropagation();deleteProject('${p.name}')">删除</button>
           <h3>${p.name}</h3>
           <div style="display:flex;gap:16px;font-size:13px;color:#999">
@@ -389,6 +389,19 @@ async function renderProjectList() {
           </div>
         </div>
       `).join('');
+
+      // Enable right-click context menu on project cards
+      document.querySelectorAll('.project-card').forEach(card => {
+        card.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const menu = document.getElementById('context-menu');
+          menu.style.display = 'block';
+          menu.style.left = e.pageX + 'px';
+          menu.style.top = e.pageY + 'px';
+          menu.dataset.projectName = card.dataset.project;
+        });
+      });
     }
   } catch (e) {
     document.getElementById('project-list-content').innerHTML = `<div class="error-message">加载项目列表失败</div>`;

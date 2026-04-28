@@ -16,9 +16,12 @@ function navigate(section) {
   document.querySelectorAll('#sidebar li[data-section]').forEach(el => {
     el.classList.toggle('active', el.dataset.section === section);
   });
-  document.querySelectorAll('#nav-projects li').forEach(el => {
-    el.classList.toggle('active', false);
-  });
+  // Keep the selected project highlighted when navigating within a project
+  if (section !== 'projects') {
+    document.querySelectorAll('#nav-projects li[data-project]').forEach(el => {
+      el.classList.toggle('active', el.dataset.project === AppState.currentProject);
+    });
+  }
   renderContent(section);
 }
 
@@ -26,8 +29,16 @@ function setProject(name) {
   AppState.currentProject = name;
   const indicator = document.getElementById('project-indicator');
   if (indicator) indicator.textContent = name ? '当前项目：' + name : '未选择项目';
+  if (indicator) indicator.style.cursor = name ? 'pointer' : 'default';
+  if (indicator) indicator.title = name ? '点击返回项目列表' : '';
   const nav = document.getElementById('sidebar-project-nav');
   if (nav) nav.style.display = name ? 'block' : 'none';
+
+  // Highlight selected project in sidebar
+  document.querySelectorAll('#nav-projects li[data-project]').forEach(el => {
+    el.classList.toggle('active', el.dataset.project === name);
+  });
+
   if (name) {
     navigate('dashboard');
   } else {

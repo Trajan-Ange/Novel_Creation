@@ -107,6 +107,7 @@ async function renderDashboard() {
       <div style="margin-top:24px">
         <h3 style="margin-bottom:12px">快捷操作</h3>
         <button class="btn btn-primary" onclick="navigate('writing')" style="margin-right:8px">写下一章</button>
+        <button class="btn btn-success" onclick="navigateManualWriter()" style="margin-right:8px">手动创作</button>
         <button class="btn btn-secondary" onclick="navigate('settings')" style="margin-right:8px">管理设定</button>
         <button class="btn btn-secondary" onclick="navigate('outline')" style="margin-right:8px">查看大纲</button>
         <button class="btn btn-secondary" onclick="navigate('foreshadowing')">伏笔管理</button>

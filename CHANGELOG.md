@@ -144,6 +144,19 @@
 - `app/static/js/utils/sse.js`（超时 + 错误日志）
 - `app/static/css/main.css`（context-menu / manual-editor / chat 样式）
 
+### v0.1.3 补丁 (2026-04-28)
+
+**v0.1.3 功能可用性修复：**
+
+- **手动创作按钮更易发现**：仪表盘新增"手动创作"快捷操作按钮（`navigateManualWriter`），直接跳转至手动编辑器
+- **手动编辑器健壮性增强**：`renderManualWriter` 增加 API 调用失败容错（`.catch` 回退），异常时仍能正常渲染编辑界面；添加即时加载状态避免页面闪烁
+- **项目选中高亮**：侧边栏选中项目现在有蓝色高亮标识，`navigate()` 在项目内导航时保持选中态
+- **返回项目列表增强**：点击头部"当前项目"标签即可返回项目列表；标签增加悬停样式和 tooltip 提示
+- **右键删除覆盖增强**：内容区项目卡片也支持右键菜单快捷删除，与侧边栏行为一致
+- **缓存版本号提升**：全部 JS/CSS 引用版本号从 `?v=2` 提升至 `?v=3`，确保浏览器获取最新文件
+
+涉及文件：`app.js`, `state.js`, `chapter-writer.js`, `project-list.js`, `foreshadowing.js`, `main.css`, `index.html`
+
 ---
 
 ## v0.1.0 (2026-04-27)

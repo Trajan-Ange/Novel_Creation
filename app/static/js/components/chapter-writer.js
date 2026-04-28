@@ -296,6 +296,12 @@ async function viewWrittenChapter() {
 }
 
 
+function navigateManualWriter() {
+  navigate('writing');
+  renderManualWriter();
+}
+
+
 // ══════════════════════════════════════════════════════════════
 // Manual Chapter Writing
 // ══════════════════════════════════════════════════════════════
@@ -307,14 +313,10 @@ function renderManualWriter(presetVol, presetCh) {
   const ch = presetCh || parseInt(document.getElementById('write-ch').value) || 1;
   manualState = { phase: 'outline', vol, ch };
 
-  // Load existing content if any
-  Promise.all([
-    API.outline.chapter(AppState.currentProject, vol, ch),
-    API.chapters.get(AppState.currentProject, vol, ch),
-  ]).then(([outlineData, chapterData]) => {
-    const existingOutline = outlineData.content || '';
-    const existingText = chapterData.content || '';
+  // Show loading state immediately
+  $content.innerHTML = `<div class="loading">正在加载手动创作界面...</div>`;
 
+  function renderManualUI(existingOutline, existingText) {
     $content.innerHTML = `
       <div class="section-header">
         <h2>手动创作 — 第${vol}卷第${ch}章</h2>
@@ -356,6 +358,16 @@ function renderManualWriter(presetVol, presetCh) {
         </div>
       </div>
     `;
+  }
+
+  // Load existing content if any, but always render the UI (even if loading fails)
+  Promise.all([
+    API.outline.chapter(AppState.currentProject, vol, ch).catch(() => ({ content: '' })),
+    API.chapters.get(AppState.currentProject, vol, ch).catch(() => ({ content: '' })),
+  ]).then(([outlineData, chapterData]) => {
+    renderManualUI(outlineData.content || '', chapterData.content || '');
+  }).catch(() => {
+    renderManualUI('', '');
   });
 }
 

@@ -19,7 +19,8 @@ ul { list-style: none; }
 }
 #header h1 { font-size: 18px; font-weight: 600; }
 #header-actions { display: flex; align-items: center; gap: 12px; }
-#project-indicator { font-size: 13px; color: #bdc3c7; }
+#project-indicator { font-size: 13px; color: #bdc3c7; cursor: pointer; }
+#project-indicator:hover { color: #fff; text-decoration: underline; }
 .btn-icon { background: none; color: #fff; font-size: 18px; padding: 4px 8px; border-radius: 4px; }
 .btn-icon:hover { background: rgba(255,255,255,0.15); }
 
