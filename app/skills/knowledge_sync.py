@@ -11,7 +11,13 @@ the output truncation that occurred with the monolithic approach.
 """
 
 import json
+import logging
 import os
+
+from app.skills.character_design import run as char_skill
+from app.skills.timeline import run as timeline_skill
+from app.skills.world_design import run as world_skill
+from app.skills.relationship import run as rel_skill
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 1 — Text Analysis Prompt
@@ -176,7 +182,6 @@ async def _call_llm(llm, system_prompt: str, context_docs: list, user_message: s
             max_tokens=max_tokens,
         )
     except Exception as e:
-        import logging
         logging.getLogger(__name__).warning(f"LLM call failed in sync phase: {e}")
         return {"content": "", "json": None}
 
@@ -296,7 +301,6 @@ async def _extract_foreshadowing(llm, fm, project: str, volume: int, chapter: in
 
 async def _process_characters(llm, fm, project: str, chapter: int, data: dict) -> list:
     """Create new characters and update existing ones. Returns summary lines."""
-    from app.skills.character_design import run as char_skill
 
     lines = []
     changed = False
@@ -362,7 +366,6 @@ async def _process_characters(llm, fm, project: str, chapter: int, data: dict) -
 
 async def _process_events(llm, fm, project: str, data: dict) -> list:
     """Update story timeline with new events. Returns summary lines."""
-    from app.skills.timeline import run as timeline_skill
 
     lines = []
     events = data.get("new_events", [])
@@ -393,7 +396,6 @@ async def _process_events(llm, fm, project: str, data: dict) -> list:
 
 async def _process_world(llm, fm, project: str, data: dict) -> list:
     """Update world setting. Returns summary lines."""
-    from app.skills.world_design import run as world_skill
 
     lines = []
     new_world = data.get("new_world_info", {})
@@ -428,7 +430,6 @@ async def _process_world(llm, fm, project: str, data: dict) -> list:
 
 async def _process_relationships(llm, fm, project: str, data: dict) -> list:
     """Update relationship map. Returns summary lines."""
-    from app.skills.relationship import run as rel_skill
 
     lines = []
     changes = data.get("relationship_changes", [])
@@ -602,7 +603,7 @@ async def run(llm, fm, project: str, params: dict):
         yield {"type": "result", "result": {"success": False, "error": f"Chapter content too short ({len(chapter_content)} chars)."}}
         return
 
-    proj_path = fm._project_path(project)
+    proj_path = fm.get_project_abs_path(project)
 
     try:
         # ── Phase 1: Text Analysis ──

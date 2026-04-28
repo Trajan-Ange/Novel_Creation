@@ -112,6 +112,31 @@ class LLMService:
 
         return await self._retry_with_backoff(_make_request, max_retries)
 
+    async def chat_messages(
+        self,
+        messages: list,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        max_retries: int = 3,
+    ):
+        """Chat with pre-built message list. Returns full text or async stream."""
+        if not self.client:
+            raise ValueError("LLM not configured. Please set API key and base URL.")
+        if stream:
+            return self._chat_stream(messages, temperature, max_tokens, max_retries)
+
+        async def _make_request():
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature if temperature is not None else self.temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
+            )
+            return response.choices[0].message.content
+
+        return await self._retry_with_backoff(_make_request, max_retries)
+
     async def _chat_stream(self, messages: list, temperature: Optional[float], max_tokens: Optional[int], max_retries: int = 3) -> AsyncIterator[tuple]:
         """Yield (type, text) tuples where type is 'content' or 'reasoning'.
 

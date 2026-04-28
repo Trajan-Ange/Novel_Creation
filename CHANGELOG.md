@@ -159,6 +159,65 @@
 
 ---
 
+## v0.1.4 (2026-04-28)
+
+### 代码清理 — v0.2.0 知识同步引擎深度重构的前置准备
+
+本次更新不涉及用户可见功能变更，聚焦于消除代码层面的低效冗余和架构债，为 v0.2.0 的重大重构扫清障碍。14/17 项计划任务完成，3 项推迟至 v0.2.0。
+
+### A 组：后端基础设施清理（6/8 完成）
+
+- **A1 — 消除 36 处闭包内 import**：`settings.py`（21处）、`chapters.py`（9处）、`knowledge_sync.py`（5处）、`outline.py`（3处）、`sync.py`（2处）全部提升至模块顶层，经审查无循环依赖风险
+- **A3 — 消除私有方法外部调用**：`fm.get_project_abs_path()` 公开方法替代 `fm._project_path()`；`llm.chat_messages()` 公开 API 替代 `llm._chat_stream()`
+- **A4 — `get_all_settings()` 上下文缓存**：5 秒 TTL 内存缓存层 + 关键写入路径缓存失效，同一请求周期避免重复读取 5-17 个文件
+- **A6 — 上下文构建逻辑统一**：新增 `app/services/context_builder.py`（`build_full_context` / `build_targeted_context` / `build_chapter_context`）
+- **A7 — 错误处理基础**：`file_manager.py` 和 `chapters.py` 引入 `logging` 模块；`项目状态.json` JSON 解码失败时通过 `logger.exception()` 告警而非静默返回 `{}`
+- **A8 — 硬编码值集中管理**：新增 `app/services/constants.py`
+
+### B 组：前端架构清理（6/6 完成）
+
+- **B1 — SSE 连接工厂**：`sse.js` 新增 `createSSEConnection(url, body, handlers)` 工厂函数
+- **B2 — API 错误处理包装**：`api.js` 新增 `safeApiCall(fn, errorMsg, onError)` 包装函数
+- **B3 — API 方法去重**：`get()`/`post()`/`put()`/`del()` 通用逻辑提取为 `_request(method, url, body)`
+- **B4 — 状态色彩 CSS 化**：新增 `.status-success` / `.status-error` / `.status-warning` / `.status-info` CSS 类
+- **B5 — XSS 修复**：project-list.js 项目名 XSS 已在 v0.1.3 修复（data-project + 事件委托）
+- **B6 — 全局变量命名空间**：新增 `namespace.js`，`window.NovelApp` 统一入口
+
+### C 组：跨模块一致性（3/3 完成）
+
+- **C1 — FileManager 命名统一**：新增 `read_project_state()` / `write_project_state()` 别名
+- **C2 — 错误响应格式统一**：新增 `app/api/utils/error_response.py`
+- **C3 — 死代码移除**：移除未使用的 `write_foreshadowing_list()`
+
+### 推迟至 v0.2.0
+
+- **A2**（统一技能返回类型）：需同步修改 9 个技能模块，风险过高
+- **A5**（I/O 异步化基础）：需 `aiofiles` 依赖 + 全部调用点适配，与 Phase 2 并行化联动
+
+### 涉及文件
+
+**新建：**
+- `app/services/constants.py`（集中常量管理）
+- `app/services/context_builder.py`（上下文组装统一）
+- `app/api/utils/error_response.py`（错误 DTO 标准化）
+- `app/static/js/namespace.js`（前端命名空间）
+
+**修改：**
+- `app/api/settings.py`（消除 21 处闭包 import + _chat_stream 迁移）
+- `app/api/chapters.py`（消除 9 处闭包 import + logging 引入）
+- `app/api/outline.py`（消除 3 处闭包 import）
+- `app/api/sync.py`（消除 2 处闭包 import）
+- `app/skills/knowledge_sync.py`（消除 5 处闭包 import + _project_path 迁移）
+- `app/services/llm.py`（新增 chat_messages 公开 API）
+- `app/storage/file_manager.py`（缓存 + logging + 命名别名 + 死代码移除）
+- `app/static/js/api.js`（_request 去重 + safeApiCall）
+- `app/static/js/utils/sse.js`（createSSEConnection 工厂）
+- `app/static/css/main.css`（status-* CSS 类）
+- `app/static/index.html`（namespace.js 引用 + 缓存版本 v=4）
+- `README.md`、`启动.bat`、`ROADMAP.md`（版本号同步）
+
+---
+
 ## v0.1.0 (2026-04-27)
 
 ### 安全修复

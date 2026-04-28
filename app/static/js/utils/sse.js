@@ -70,3 +70,21 @@ class SSEClient {
     }
   }
 }
+
+/**
+ * SSE connection factory. Eliminates 10+ repetitive SSEClient instantiation
+ * patterns across chapter-writer.js, outline-tree.js, project-list.js,
+ * and settings-chat.js.
+ *
+ * @param {string} url - SSE endpoint URL
+ * @param {object} body - POST body (JSON)
+ * @param {object} handlers - { onEvent(data), onError(err), timeout? }
+ * @returns {SSEClient}
+ */
+function createSSEConnection(url, body, handlers = {}) {
+  const sse = new SSEClient({ timeout: handlers.timeout || 300000 });
+  sse.onEvent = handlers.onEvent || null;
+  sse.onError = handlers.onError || null;
+  sse.connect(url, { body });
+  return sse;
+}

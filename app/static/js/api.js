@@ -1,51 +1,64 @@
 /** API client — all backend fetch calls */
+
+/**
+ * Wraps an async API call with standardized error handling.
+ * Eliminates 28+ repetitive try/catch blocks across component files.
+ *
+ * @param {Function} fn - async function that performs the API call
+ * @param {string} errorMsg - human-readable error prefix
+ * @param {Function} [onError] - optional callback receiving the error message
+ * @returns {Promise<{success:boolean, data?:any, error?:string}>}
+ */
+async function safeApiCall(fn, errorMsg, onError) {
+  try {
+    const result = await fn();
+    if (result && result.success === false) {
+      const msg = `${errorMsg}: ${result.error}`;
+      if (onError) onError(msg);
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: result };
+  } catch (e) {
+    const msg = `${errorMsg}: ${e.message || e}`;
+    if (onError) onError(msg);
+    return { success: false, error: msg };
+  }
+}
+
 const API = {
-  async get(url) {
-    const res = await fetch(url);
-    const body = await res.json().catch(() => ({}));
+  async _request(method, url, body) {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+    };
+    if (body !== undefined) {
+      opts.body = JSON.stringify(body);
+    } else {
+      delete opts.headers;
+    }
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const errBody = body?.detail || body;
+      const errBody = data?.detail || data;
       return { success: false, error: errBody?.error || `HTTP ${res.status}` };
     }
-    return body;
+    return data;
+  },
+
+  async get(url) {
+    return this._request('GET', url);
   },
 
   async post(url, body = {}) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errBody = data?.detail || data;
-      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
-    }
-    return data;
+    return this._request('POST', url, body);
   },
 
   async put(url, body = {}) {
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errBody = data?.detail || data;
-      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
-    }
-    return data;
+    return this._request('PUT', url, body);
   },
 
   async del(url) {
-    const res = await fetch(url, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errBody = data?.detail || data;
-      return { success: false, error: errBody?.error || `HTTP ${res.status}` };
-    }
-    return data;
+    return this._request('DELETE', url);
   },
 
   // ── Config ──────────────────────────────────────

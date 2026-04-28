@@ -3,6 +3,8 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from app.skills.outline import run as outline_skill_run
+
 router = APIRouter(prefix="/api/outline", tags=["outline"])
 
 
@@ -33,10 +35,9 @@ async def save_book_outline(request: Request, project: str, body: OutlineSaveReq
 
 @router.post("/{project}/book/generate")
 async def generate_book_outline(request: Request, project: str, body: OutlineGenerateRequest):
-    from app.skills.outline import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await outline_skill_run(llm, fm, project, {
         "action": "create_book",
         "instruction": body.instruction,
     })
@@ -59,10 +60,9 @@ async def save_volume_outline(request: Request, project: str, volume: int, body:
 
 @router.post("/{project}/volume/{volume}/generate")
 async def generate_volume_outline(request: Request, project: str, volume: int, body: OutlineGenerateRequest):
-    from app.skills.outline import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await outline_skill_run(llm, fm, project, {
         "action": "create_volume",
         "volume": volume,
         "instruction": body.instruction,

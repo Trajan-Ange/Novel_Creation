@@ -5,10 +5,16 @@ path validation, markdown read/write, JSON serialization, and keyword search.
 """
 
 import json
+import logging
 import os
 import re
+import time
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+SETTINGS_CACHE_TTL = 5.0  # seconds — same-request dedup without staleness
 
 
 class FileManager:
@@ -17,10 +23,18 @@ class FileManager:
     def __init__(self, projects_root: str):
         self.projects_root = os.path.abspath(projects_root)
         os.makedirs(self.projects_root, exist_ok=True)
+        self._settings_cache: dict[str, tuple[float, list[dict]]] = {}
+
+    def _invalidate_cache(self, project: str):
+        self._settings_cache.pop(project, None)
 
     def _project_path(self, name: str) -> str:
         raw = os.path.join(self.projects_root, name)
         return self._validate_path(raw)
+
+    def get_project_abs_path(self, name: str) -> str:
+        """Public accessor for the project directory absolute path."""
+        return self._project_path(name)
 
     def _validate_name(self, name: str):
         """Project names: alphanumeric, underscores, Chinese characters, spaces."""
@@ -62,7 +76,10 @@ class FileManager:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError:
+            logger.exception("项目状态文件损坏，使用空状态回退：%s", path)
             return {}
 
     def _write_json(self, path: str, data: dict):
@@ -144,10 +161,23 @@ class FileManager:
         path = os.path.join(self._project_path(name), "项目状态.json")
         return self._read_json(path)
 
+    def read_project_state(self, name: str) -> dict:
+        """Alias for get_project_state — conforms to read_* naming convention."""
+        return self.get_project_state(name)
+
     def save_project_state(self, name: str, state: dict):
         state["最近更新时间"] = datetime.now().isoformat()
         path = os.path.join(self._project_path(name), "项目状态.json")
         self._write_json(path, state)
+        self._invalidate_cache(name)
+
+    def write_project_state(self, name: str, state: dict):
+        """Alias for save_project_state — conforms to write_* naming convention."""
+        self.save_project_state(name, state)
+        state["最近更新时间"] = datetime.now().isoformat()
+        path = os.path.join(self._project_path(name), "项目状态.json")
+        self._write_json(path, state)
+        self._invalidate_cache(name)
 
     # ── Settings read/write ────────────────────────────────────
 
@@ -159,6 +189,7 @@ class FileManager:
 
     def write_world_setting(self, project: str, content: str):
         self._write_file(self._settings_path(project, "世界设定.md"), content)
+        self._invalidate_cache(project)
 
     def read_character(self, project: str, char_name: str) -> Optional[str]:
         self._validate_char_name(char_name)
@@ -167,6 +198,7 @@ class FileManager:
     def write_character(self, project: str, char_name: str, content: str):
         self._validate_char_name(char_name)
         self._write_file(self._settings_path(project, f"人物设定/{char_name}.md"), content)
+        self._invalidate_cache(project)
 
     def list_characters(self, project: str) -> list[str]:
         chars_dir = self._settings_path(project, "人物设定")
@@ -282,6 +314,7 @@ class FileManager:
         self._write_file(
             self._chapter_path(project, f"第{volume}卷/第{chapter}章.md"), content
         )
+        self._invalidate_cache(project)
 
     def list_chapters(self, project: str, volume: int) -> list[int]:
         chaps_dir = self._chapter_path(project, f"第{volume}卷")
@@ -301,9 +334,6 @@ class FileManager:
 
     def read_foreshadowing_list(self, project: str) -> Optional[str]:
         return self._read_file(self._fb_path(project, "伏笔清单.md"))
-
-    def write_foreshadowing_list(self, project: str, content: str):
-        self._write_file(self._fb_path(project, "伏笔清单.md"), content)
 
     def read_foreshadowing_detail(self, project: str, fb_id: str) -> Optional[str]:
         return self._read_file(self._fb_path(project, f"伏笔详情/{fb_id}.md"))
@@ -347,7 +377,17 @@ class FileManager:
     # ── All settings snapshot ──────────────────────────────────
 
     def get_all_settings(self, project: str) -> list[dict]:
-        """Return all current settings as context docs for LLM calls."""
+        """Return all current settings as context docs for LLM calls.
+
+        Results are cached with a short TTL so that multiple calls within
+        the same request cycle (e.g. sync Phase 2 parallel extractions)
+        avoid re-reading the same files.
+        """
+        now = time.monotonic()
+        cached = self._settings_cache.get(project)
+        if cached and now - cached[0] < SETTINGS_CACHE_TTL:
+            return cached[1]
+
         docs = []
 
         world = self.read_world_setting(project)
@@ -375,4 +415,5 @@ class FileManager:
         if style:
             docs.append({"title": "风格指南", "content": style})
 
+        self._settings_cache[project] = (time.monotonic(), docs)
         return docs

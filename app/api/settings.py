@@ -7,6 +7,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
+from app.skills.world_design import run as world_skill_run, SYSTEM_PROMPT as WORLD_SYSTEM_PROMPT
+from app.skills.character_design import run as character_skill_run, SYSTEM_PROMPT as CHARACTER_SYSTEM_PROMPT
+from app.skills.timeline import run as timeline_skill_run, SYSTEM_PROMPT as TIMELINE_SYSTEM_PROMPT
+from app.skills.relationship import run as relationship_skill_run, SYSTEM_PROMPT as RELATIONSHIP_SYSTEM_PROMPT
+from app.skills.writing_assist import run as writing_assist_run, SYSTEM_PROMPT_STYLE
+from app.skills.outline import SYSTEM_PROMPT_BOOK, SYSTEM_PROMPT_VOLUME, SYSTEM_PROMPT_CHAPTER
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -63,10 +69,9 @@ async def save_world(request: Request, project: str, body: SettingSaveRequest):
 
 @router.post("/{project}/world/generate")
 async def generate_world(request: Request, project: str, body: SettingRequest):
-    from app.skills.world_design import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await world_skill_run(llm, fm, project, {
         "action": "create" if not fm.read_world_setting(project) else "update",
         "instruction": body.instruction,
         "existing_content": fm.read_world_setting(project),
@@ -91,10 +96,9 @@ async def get_character(request: Request, project: str, char_name: str):
 
 @router.post("/{project}/characters/generate")
 async def generate_character(request: Request, project: str, body: SettingRequest):
-    from app.skills.character_design import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await character_skill_run(llm, fm, project, {
         "action": "create",
         "instruction": body.instruction,
         "char_name": _extract_char_name(body.instruction) if body.instruction else "新角色",
@@ -137,10 +141,9 @@ async def save_timeline(request: Request, project: str, body: TimelineSaveReques
 
 @router.post("/{project}/timeline/generate")
 async def generate_timeline(request: Request, project: str, body: SettingRequest):
-    from app.skills.timeline import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await timeline_skill_run(llm, fm, project, {
         "action": "create",
         "instruction": body.instruction,
         "existing_bg": fm.read_background_timeline(project),
@@ -168,10 +171,9 @@ async def save_relationship(request: Request, project: str, body: SettingSaveReq
 
 @router.post("/{project}/relationship/generate")
 async def generate_relationship(request: Request, project: str, body: SettingRequest):
-    from app.skills.relationship import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await relationship_skill_run(llm, fm, project, {
         "action": "create",
         "instruction": body.instruction,
         "existing_content": fm.read_relationship(project),
@@ -195,10 +197,9 @@ async def save_style_guide(request: Request, project: str, body: SettingSaveRequ
 
 @router.post("/{project}/style-guide/generate")
 async def generate_style_guide(request: Request, project: str, body: SettingRequest):
-    from app.skills.writing_assist import run
     llm = request.app.state.llm
     fm = request.app.state.fm
-    result = await run(llm, fm, project, {
+    result = await writing_assist_run(llm, fm, project, {
         "action": "style_collect",
         "instruction": body.instruction,
     })
@@ -230,24 +231,21 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 context_parts.append("")
 
             if st == "world":
-                from app.skills.world_design import SYSTEM_PROMPT
                 existing = fm.read_world_setting(project)
                 if existing:
                     context_parts.insert(0, f"【当前世界设定】\n{existing}\n")
                 context_parts.append(f"---\n用户指令：请{'更新' if existing else '创建'}世界设定。{instruction}")
-                full_sys = SYSTEM_PROMPT
+                full_sys = WORLD_SYSTEM_PROMPT
                 user_msg = "\n".join(context_parts)
                 yield send("status", {"message": f"正在{'更新' if existing else '生成'}世界设定..."})
 
             elif st == "character":
-                from app.skills.character_design import SYSTEM_PROMPT
                 context_parts.append(f"---\n用户指令：创建主角和主要配角。{instruction}")
-                full_sys = SYSTEM_PROMPT
+                full_sys = CHARACTER_SYSTEM_PROMPT
                 user_msg = "\n".join(context_parts)
                 yield send("status", {"message": "正在生成人物设定..."})
 
             elif st == "timeline":
-                from app.skills.timeline import SYSTEM_PROMPT
                 existing_bg = fm.read_background_timeline(project)
                 existing_story = fm.read_story_timeline(project)
                 if existing_bg:
@@ -255,29 +253,26 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 if existing_story:
                     context_parts.insert(0, f"【当前故事时间线】\n{existing_story}\n")
                 context_parts.append(f"---\n用户指令：创建完整的背景时间线和故事时间线。{instruction}")
-                full_sys = SYSTEM_PROMPT
+                full_sys = TIMELINE_SYSTEM_PROMPT
                 user_msg = "\n".join(context_parts)
                 yield send("status", {"message": "正在生成时间线..."})
 
             elif st == "relationship":
-                from app.skills.relationship import SYSTEM_PROMPT
                 existing = fm.read_relationship(project)
                 if existing:
                     context_parts.insert(0, f"【当前人物关系】\n{existing}\n")
                 context_parts.append(f"---\n用户指令：创建人物关系图谱。{instruction}")
-                full_sys = SYSTEM_PROMPT
+                full_sys = RELATIONSHIP_SYSTEM_PROMPT
                 user_msg = "\n".join(context_parts)
                 yield send("status", {"message": "正在生成人物关系..."})
 
             elif st == "style":
-                from app.skills.writing_assist import SYSTEM_PROMPT_STYLE
                 context_parts.append(f"---\n用户指令：分析并创建风格指南。{instruction}")
                 full_sys = SYSTEM_PROMPT_STYLE
                 user_msg = "\n".join(context_parts)
                 yield send("status", {"message": "正在生成风格指南..."})
 
             elif st == "book_outline":
-                from app.skills.outline import SYSTEM_PROMPT_BOOK
                 existing = fm.read_book_outline(project)
                 if existing:
                     context_parts.insert(0, f"【当前全书大纲】\n{existing}\n")
@@ -287,7 +282,6 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 yield send("status", {"message": "正在生成全书大纲..."})
 
             elif st == "volume_outline":
-                from app.skills.outline import SYSTEM_PROMPT_VOLUME
                 book_outline = fm.read_book_outline(project)
                 if book_outline:
                     context_parts.insert(0, f"【全书大纲（参考）】\n{book_outline}\n")
@@ -298,7 +292,6 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 yield send("status", {"message": f"正在生成第{vol}卷大纲..."})
 
             elif st == "chapter_outline":
-                from app.skills.outline import SYSTEM_PROMPT_CHAPTER
                 book_outline = fm.read_book_outline(project)
                 if book_outline:
                     context_parts.insert(0, f"【全书大纲】\n{book_outline}\n")
@@ -605,24 +598,23 @@ def _split_characters(markdown_text: str) -> list:
 
 def _build_generation_prompt(setting_type: str) -> str:
     if setting_type == "world":
-        from app.skills.world_design import SYSTEM_PROMPT
+        return WORLD_SYSTEM_PROMPT
     elif setting_type == "character":
-        from app.skills.character_design import SYSTEM_PROMPT
+        return CHARACTER_SYSTEM_PROMPT
     elif setting_type == "timeline":
-        from app.skills.timeline import SYSTEM_PROMPT
+        return TIMELINE_SYSTEM_PROMPT
     elif setting_type == "relationship":
-        from app.skills.relationship import SYSTEM_PROMPT
+        return RELATIONSHIP_SYSTEM_PROMPT
     elif setting_type == "style":
-        from app.skills.writing_assist import SYSTEM_PROMPT_STYLE
+        return SYSTEM_PROMPT_STYLE
     elif setting_type == "book_outline":
-        from app.skills.outline import SYSTEM_PROMPT_BOOK
+        return SYSTEM_PROMPT_BOOK
     elif setting_type == "volume_outline":
-        from app.skills.outline import SYSTEM_PROMPT_VOLUME
+        return SYSTEM_PROMPT_VOLUME
     elif setting_type == "chapter_outline":
-        from app.skills.outline import SYSTEM_PROMPT_CHAPTER
+        return SYSTEM_PROMPT_CHAPTER
     else:
         raise ValueError(f"Unknown setting_type: {setting_type}")
-    return SYSTEM_PROMPT
 
 
 @router.post("/chat-generate")
@@ -652,7 +644,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 if await check_disconnected(request):
                     return
                 full_text = ""
-                stream = llm._chat_stream(messages, None, None)
+                stream = llm.chat_messages(messages, stream=True)
                 chunk_count = 0
                 async for chunk_type, chunk_text in stream:
                     if chunk_type == "reasoning":
@@ -685,7 +677,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 if await check_disconnected(request):
                     return
                 full_text = ""
-                stream = llm._chat_stream(messages, None, None)
+                stream = llm.chat_messages(messages, stream=True)
                 chunk_count = 0
                 async for chunk_type, chunk_text in stream:
                     if chunk_type == "reasoning":

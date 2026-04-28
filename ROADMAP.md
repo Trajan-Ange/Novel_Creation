@@ -77,6 +77,63 @@
 
 ---
 
+## v0.1.4 — 代码清理与 v0.2.0 基础设施准备
+
+### 目标
+
+本次更新不聚焦于用户可见功能，而是清理代码层面的低效冗余，为 v0.2.0 知识同步引擎深度重构扫清障碍。
+
+### A 组：后端基础设施清理（阻塞 v0.2.0）
+
+- [x] **A1 — 消除 36 处闭包内 import**：`settings.py`（21处）、`chapters.py`（9处）、`knowledge_sync.py`（5处）、`outline.py`（3处）、`sync.py`（2处）。全部提升至模块顶层。经审查无循环依赖风险。
+
+- [ ] **A2 — 统一技能返回类型**：为非流式技能定义统一的返回 dataclass（`SkillResult`），替代当前的 `dict` / `AsyncIterator` 混用。→ **推迟至 v0.2.0**（需同步修改 9 个技能模块，风险过高，v0.2.0 重构时一并进行）。
+
+- [x] **A3 — 消除 `_project_path()` 和 `_chat_stream()` 外部调用**：新增 `fm.get_project_abs_path()` 公开方法 + `llm.chat_messages()` 公开 API。所有外部调用已迁移。
+
+- [x] **A4 — `get_all_settings()` 上下文缓存**：新增 5 秒 TTL 内存缓存层 + 关键写入路径缓存失效。同一请求周期内避免重复读取。
+
+- [ ] **A5 — I/O 异步化基础**：所有 `FileManager` 同步方法包装 `run_in_executor()`。→ **推迟至 v0.2.0**（需 `aiofiles` 依赖 + 所有调用点适配，与 Phase 2 并行化联动）。
+
+- [x] **A6 — 上下文构建逻辑统一**：新增 `app/services/context_builder.py`（`build_full_context` / `build_targeted_context` / `build_chapter_context`），集中管理上下文组装。
+
+- [x] **A7 — 错误处理基础**：`file_manager.py` 和 `chapters.py` 引入 `logging` 模块。`项目状态.json` JSON 解码失败时通过 `logger.exception()` 告警而非静默返回 `{}`。
+
+- [x] **A8 — 硬编码值集中管理**：新增 `app/services/constants.py`，统一管理 `max_tokens`、`timeout`、重试次数等常数值。
+
+### B 组：前端架构清理
+
+- [x] **B1 — SSE 连接工厂统一**：`sse.js` 新增 `createSSEConnection(url, body, handlers)` 工厂函数。
+
+- [x] **B2 — API 调用错误处理包装**：`api.js` 新增 `safeApiCall(fn, errorMsg, onError)` 包装函数。
+
+- [x] **B3 — 消除 API 对象内 4 方法重复代码**：`get()`/`post()`/`put()`/`del()` 的通用逻辑提取为 `_request(method, url, body)` 私有方法。
+
+- [x] **B4 — 状态反馈色彩 CSS 化**：`main.css` 新增 `.status-success` / `.status-error` / `.status-warning` / `.status-info` CSS 类。
+
+- [x] **B5 — XSS 高危点修复**：project-list.js 项目名 XSS 已在 v0.1.3 修复（data-project + 事件委托）。`escapeHtml()` 已存在于 helpers.js。
+
+- [x] **B6 — 全局变量初步收束**：新增 `app/static/js/namespace.js`，所有组件可通过 `window.NovelApp` 命名空间访问。
+
+### C 组：跨模块一致性
+
+- [x] **C1 — FileManager 命名规范化**：新增 `read_project_state()` / `write_project_state()` 别名方法，统一四类前缀。
+
+- [x] **C2 — 错误响应格式统一**：新增 `app/api/utils/error_response.py`，提供 `error_response()` / `http_error_detail()` / `sse_error()` 标准化辅助函数。
+
+- [x] **C3 — 废弃死代码移除**：已移除未使用的 `write_foreshadowing_list()` 方法。
+
+### 不在 v0.1.4 范围内（推迟到 v0.2.0+）
+
+- ❌ innerHTML 全面替换 DOM API（工程量过大，渐进式推进）
+- ❌ 109 个全局变量全面模块化（需要前端构建工具或 ES Module 迁移）
+- ❌ 62 处 inline onclick 改为事件委托（与 innerHTML 替换联动）
+- ❌ 前端路由系统（hash-based）
+- ❌ pytest 测试覆盖
+- ❌ 暗色模式 / Monaco Editor / 移动端适配
+
+---
+
 ## v0.2.0 — 知识同步引擎深度重构 ⭐ 里程碑
 
 ### 问题诊断
@@ -168,5 +225,5 @@
 
 ---
 
-*最后更新：2026-04-28（v0.1.3 已部署 + 补丁修复）*
+*最后更新：2026-04-28（v0.1.4 代码清理完成 — 14/17 任务完成，3 项推迟至 v0.2.0）*
 *代码审查覆盖：24 个后端文件 + 13 个前端文件，共发现 6 CRITICAL / 11 HIGH / 15 MEDIUM / 14 LOW — 严重/中等项已于 v0.1.3 全部修复*

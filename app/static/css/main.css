@@ -206,3 +206,9 @@ ul { list-style: none; }
 
 /* ── Nav Back ─────────────────────────────────── */
 .nav-back { color: #95a5a6 !important; font-style: italic; }
+
+/* ── Status Colors ────────────────────────────── */
+.status-success { color: #27ae60; }
+.status-error { color: #e74c3c; }
+.status-warning { color: #e67e22; }
+.status-info { color: #3498db; }

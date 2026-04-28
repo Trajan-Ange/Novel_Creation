@@ -1,10 +1,16 @@
 """Chapter writing API endpoints with SSE streaming."""
 
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
+from app.skills.outline import run as outline_run
+from app.skills.chapter_write import run as chapter_run
+from app.skills.knowledge_sync import run as sync_run
+from app.skills.writing_assist import run as assist_run
 
 router = APIRouter(prefix="/api/chapters", tags=["chapters"])
 
@@ -73,11 +79,6 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
     fm = request.app.state.fm
 
     async def event_stream():
-        from app.skills.outline import run as outline_run
-        from app.skills.chapter_write import run as chapter_run
-        from app.skills.knowledge_sync import run as sync_run
-        from app.skills.writing_assist import run as assist_run
-
         project = body.project
         volume = body.volume
         chapter = body.chapter
@@ -311,11 +312,6 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
     fm = request.app.state.fm
 
     async def event_stream():
-        from app.skills.outline import run as outline_run
-        from app.skills.chapter_write import run as chapter_run
-        from app.skills.knowledge_sync import run as sync_run
-        from app.skills.writing_assist import run as assist_run
-
         project = body.project
         volume = body.volume
         chapter = body.chapter
@@ -441,7 +437,6 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
 @router.post("/query")
 async def query_memory(request: Request, body: ChapterQueryRequest):
     """Query project memory for information."""
-    from app.skills.writing_assist import run as assist_run
     llm = request.app.state.llm
     fm = request.app.state.fm
     result = await assist_run(llm, fm, body.project, {
