@@ -1,6 +1,8 @@
-# 版本日志 (CHANGELOG)
+# Changelog
 
-本项目遵循语义化版本控制 (SemVer)：`v主版本.次版本.修订号`
+All notable changes to this project will be documented in this file.
+
+This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
@@ -37,6 +39,53 @@
 - `app/services/llm.py`
 - `app/api/chapters.py`
 - `app/skills/timeline.py`
+
+---
+
+## v0.1.2 (2026-04-28)
+
+### Critical Bug Fix — 章节大纲流式生成卡住
+
+**根因：** DeepSeek V4 (deepseek-v4-pro) 模型在生成内容前有一个推理阶段 (reasoning phase)，此阶段的 SSE chunk 中 `delta.content` 为 `None`，推理内容在 `delta.reasoning_content` 字段中。`_chat_stream()` 仅检查 `delta.content`，导致推理阶段无任何数据 yield，前端表现为"卡住无输出"。
+
+**修复：** `app/services/llm.py:_chat_stream()` 改为同时检查 `delta.content or delta.reasoning_content`，推理阶段也能流式输出，用户可实时看到模型思考过程。
+
+### Critical Bug Fix — 知识同步在事件提取阶段卡住
+
+**根因 A — max_tokens 不足：** 事件/世界/关系/伏笔提取使用 `max_tokens=4096`，DeepSeek V4 的推理 tokens 计入输出预算，导致 JSON 输出空间不足、LLM 调用超时或响应截断。
+
+**根因 B — 时间线更新上下文膨胀：** `timeline.run()` 无条件调用 `fm.get_all_settings(project)` 加载所有创作依据（含 21KB 人物关系等），每次 `add_event` 操作都发送 50KB+ 上下文给 LLM，导致响应极慢（测试中 >4 分钟）。
+
+**修复：**
+- `knowledge_sync.py`: Phase 2b~2e 的 `max_tokens` 从 4096 提升至 8192
+- `timeline.py`: 仅在 `action="create"` 时加载全部设定，`add_event` 仅使用已有时间线
+- `llm.py`: `AsyncOpenAI` 客户端增加 `timeout=120s` 防止无限挂起
+
+### 新增功能
+
+- **章节大纲流式生成：** `outline.py` 的 `create_chapter` action 支持 `stream=True` 参数，`chapters.py` 的 `generate_chapter` 端点将大纲逐 chunk 推送至前端
+- **知识同步流式进度：** `chapters.py` 的两处 sync 调用改为 `async for` 迭代 `sync_run()` 生成器，将阶段进度消息作为 SSE `status` 事件实时推送
+- **章节管理系统：** 新增 `chapter-manager.js` 组件，支持按卷浏览章节列表（含已写作/有大纲/无内容 状态标识）、正文/大纲双标签查看、字数统计、一键跳转章节写作
+
+### Bug 修复
+
+- **双输入框 Bug：** `addChatInput()` 添加顶部去重守卫，移除 `awaiting_confirmation` 事件中重复的 `addChatInput` 调用
+- 章节写作页面的卷/章输入框默认值使用 `writeState`，支持从章节管理跳转时自动预填
+- **推理内容过滤：** `_chat_stream()` 改为 yield `(type, text)` 元组，所有 7 个流式调用点（`chapters.py` 3 处 + `settings.py` 4 处）过滤 `reasoning` 类型 chunk，仅向用户展示实际内容，思维过程以单次"模型思考中..."状态事件替代
+- **正文生成截断修复：** `chapter_write.py` 的 `max_tokens` 从 8192 提升至 16384，`outline.py` 章节大纲从 4096 提升至 8192，知识同步各提取阶段从 4096 提升至 8192，确保 DeepSeek V4 推理 tokens 不挤占输出空间
+
+### 涉及文件
+
+- `app/services/llm.py`（推理内容流式修复 + timeout=120s）
+- `app/skills/outline.py`（stream 参数支持 + max_tokens 提升）
+- `app/skills/chapter_write.py`（max_tokens 提升至 16384）
+- `app/skills/knowledge_sync.py`（各阶段 max_tokens 提升至 8192）
+- `app/skills/timeline.py`（仅 create 时加载全部设定）
+- `app/api/chapters.py`（大纲流式 + sync 流式进度 + 推理过滤）
+- `app/api/settings.py`（4 处流式调用点推理过滤）
+- `app/static/js/components/chapter-writer.js`（大纲流式展示 + 双输入框修复）
+- `app/static/js/components/chapter-manager.js`（新建，章节管理）
+- `app/static/js/state.js`、`app/static/index.html`、`app/static/css/main.css`
 
 ---
 

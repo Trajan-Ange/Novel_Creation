@@ -31,7 +31,11 @@ class LLMService:
         api_key = self.config.get("api_key", "")
         base_url = self.config.get("base_url", "https://api.openai.com/v1")
         if api_key:
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=120.0,
+            )
 
     def update_config(self, config: dict):
         self.config = config
@@ -108,7 +112,12 @@ class LLMService:
 
         return await self._retry_with_backoff(_make_request, max_retries)
 
-    async def _chat_stream(self, messages: list, temperature: Optional[float], max_tokens: Optional[int], max_retries: int = 3) -> AsyncIterator[str]:
+    async def _chat_stream(self, messages: list, temperature: Optional[float], max_tokens: Optional[int], max_retries: int = 3) -> AsyncIterator[tuple]:
+        """Yield (type, text) tuples where type is 'content' or 'reasoning'.
+
+        Callers that produce user-visible output should filter out 'reasoning'
+        chunks and send periodic status/heartbeat events instead.
+        """
         async def _create_stream():
             return await self.client.chat.completions.create(
                 model=self.model,
@@ -120,8 +129,12 @@ class LLMService:
 
         response = await self._retry_with_backoff(_create_stream, max_retries)
         async for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if chunk.choices:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield ("content", delta.content)
+                elif delta.reasoning_content:
+                    yield ("reasoning", delta.reasoning_content)
 
     async def chat_with_context(
         self,

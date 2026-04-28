@@ -315,15 +315,17 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 yield send("error", {"message": f"未知的设置类型：{st}"})
                 return
 
-            # Stream the generation
+            # Stream the generation (filter reasoning, only show content)
             if await check_disconnected(request):
                 return
             full_text = ""
             stream = await llm.chat(full_sys, user_msg, stream=True)
             chunk_count = 0
-            async for chunk in stream:
-                full_text += chunk
-                yield send("text_chunk", {"text": chunk})
+            async for chunk_type, chunk_text in stream:
+                if chunk_type == "reasoning":
+                    continue
+                full_text += chunk_text
+                yield send("text_chunk", {"text": chunk_text})
                 chunk_count += 1
                 if chunk_count % 10 == 0 and await check_disconnected(request):
                     return
@@ -636,9 +638,11 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 full_text = ""
                 stream = llm._chat_stream(messages, None, None)
                 chunk_count = 0
-                async for chunk in stream:
-                    full_text += chunk
-                    yield send("text_chunk", {"text": chunk})
+                async for chunk_type, chunk_text in stream:
+                    if chunk_type == "reasoning":
+                        continue
+                    full_text += chunk_text
+                    yield send("text_chunk", {"text": chunk_text})
                     chunk_count += 1
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return
@@ -667,9 +671,11 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 full_text = ""
                 stream = llm._chat_stream(messages, None, None)
                 chunk_count = 0
-                async for chunk in stream:
-                    full_text += chunk
-                    yield send("text_chunk", {"text": chunk})
+                async for chunk_type, chunk_text in stream:
+                    if chunk_type == "reasoning":
+                        continue
+                    full_text += chunk_text
+                    yield send("text_chunk", {"text": chunk_text})
                     chunk_count += 1
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return
@@ -730,9 +736,11 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 full_text = ""
                 gen_stream = await llm.chat(gen_prompt, full_user_msg, stream=True)
                 chunk_count = 0
-                async for chunk in gen_stream:
-                    full_text += chunk
-                    yield send("text_chunk", {"text": chunk})
+                async for chunk_type, chunk_text in gen_stream:
+                    if chunk_type == "reasoning":
+                        continue
+                    full_text += chunk_text
+                    yield send("text_chunk", {"text": chunk_text})
                     chunk_count += 1
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return

@@ -114,3 +114,31 @@ ul { list-style: none; }
 .card h3 { margin-bottom: 12px; font-size: 15px; color: #2c3e50; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .section-header h2 { font-size: 18px; color: #2c3e50; }
+
+/* ── Chapter Manager ──────────────────────────── */
+.cm-layout { display: flex; gap: 0; height: calc(100vh - 140px); border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fff; }
+.cm-sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; background: #fafafa; }
+.cm-vol-selector { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px; border-bottom: 1px solid #e0e0e0; }
+.cm-vol-tab { padding: 4px 10px; font-size: 13px; border-radius: 4px; background: #e8e8e8; color: #555; border: none; cursor: pointer; }
+.cm-vol-tab:hover { background: #d0d0d0; }
+.cm-vol-tab.active { background: #4a90d9; color: #fff; }
+.cm-chapter-list { flex: 1; overflow-y: auto; padding: 8px; }
+.cm-chapter-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 13px; transition: background 0.1s; }
+.cm-chapter-item:hover { background: #e8e8e8; }
+.cm-chapter-item.active { background: #e3f0ff; color: #4a90d9; font-weight: 500; }
+.cm-ch-num { flex: 1; }
+.cm-ch-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #eee; color: #999; }
+.cm-has-content .cm-ch-status { background: #e8f8ef; color: #27ae60; }
+.cm-has-outline .cm-ch-status { background: #fff3e0; color: #e67e22; }
+.cm-no-content .cm-ch-status { background: #eee; color: #bbb; }
+
+.cm-viewer { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.cm-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e0e0e0; }
+.cm-toolbar h3 { font-size: 15px; color: #2c3e50; }
+.cm-toolbar-actions { display: flex; align-items: center; gap: 12px; }
+.cm-word-count { font-size: 13px; color: #888; }
+.cm-tabs { display: flex; padding: 0 20px; border-bottom: 1px solid #e0e0e0; }
+.cm-tab { padding: 10px 16px; font-size: 13px; background: none; border: none; border-bottom: 2px solid transparent; color: #888; cursor: pointer; }
+.cm-tab:hover { color: #333; }
+.cm-tab.active { color: #4a90d9; border-bottom-color: #4a90d9; }
+.cm-tab-content { padding: 20px; flex: 1; overflow-y: auto; }

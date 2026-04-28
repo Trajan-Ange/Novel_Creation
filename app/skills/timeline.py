@@ -90,8 +90,10 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     if existing_story:
         context_docs.append({"title": "当前故事时间线", "content": existing_story})
 
-    # Add all settings for context
-    context_docs.extend(fm.get_all_settings(project))
+    # Only add full settings for create action (needs comprehensive context).
+    # For add_event, the instruction already contains the events to add.
+    if action == "create":
+        context_docs.extend(fm.get_all_settings(project))
 
     user_message = instruction
 

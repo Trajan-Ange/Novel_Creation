@@ -101,14 +101,14 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 context_docs=context_docs,
                 user_message=user_message,
                 stream=True,
-                max_tokens=8192,
+                max_tokens=16384,
             )
         else:
             result = await llm.chat_with_context(
                 system_prompt=SYSTEM_PROMPT,
                 context_docs=context_docs,
                 user_message=user_message,
-                max_tokens=8192,
+                max_tokens=16384,
             )
             return {"success": True, "content": result}
     except Exception as e:

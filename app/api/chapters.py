@@ -83,25 +83,41 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 })
                 return
 
-            # Step 1: Generate chapter outline
+            # Step 1: Generate chapter outline with streaming
             if await check_disconnected(request):
                 return
             yield send("status", {"message": "正在生成章节大纲..."})
 
             existing_outline = fm.read_chapter_outline(project, volume, chapter)
-            outline_result = await outline_run(llm, fm, project, {
+            outline_stream = await outline_run(llm, fm, project, {
                 "action": "create_chapter",
                 "volume": volume,
                 "chapter": chapter,
                 "instruction": body.instruction,
                 "existing_chapter_outline": existing_outline,
+                "stream": True,
             })
 
-            if not outline_result.get("success"):
-                yield send("error", {"message": outline_result.get("error", "大纲生成失败")})
+            # Stream outline chunks to frontend (filter reasoning, only show content)
+            if isinstance(outline_stream, dict):
+                yield send("error", {"message": outline_stream.get("error", "大纲生成失败")})
                 return
 
-            outline_content = outline_result["content"]
+            outline_content = ""
+            chunk_count = 0
+            reasoning_count = 0
+            async for chunk_type, chunk_text in outline_stream:
+                if chunk_type == "reasoning":
+                    if reasoning_count == 0:
+                        yield send("status", {"message": "模型思考中..."})
+                    reasoning_count += 1
+                    continue
+                outline_content += chunk_text
+                yield send("outline_chunk", {"text": chunk_text})
+                chunk_count += 1
+                if chunk_count % 5 == 0 and await check_disconnected(request):
+                    return
+
             fm.write_chapter_outline(project, volume, chapter, outline_content)
             yield send("outline", {"markdown": outline_content})
 
@@ -138,9 +154,18 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
 
             full_text = ""
             chunk_count = 0
-            async for chunk in stream:
-                full_text += chunk
-                yield send("text_chunk", {"text": chunk})
+            reasoning_count = 0
+            if isinstance(stream, dict):
+                yield send("error", {"message": stream.get("error", "正文生成失败")})
+                return
+            async for chunk_type, chunk_text in stream:
+                if chunk_type == "reasoning":
+                    if reasoning_count == 0:
+                        yield send("status", {"message": "模型思考中..."})
+                    reasoning_count += 1
+                    continue
+                full_text += chunk_text
+                yield send("text_chunk", {"text": chunk_text})
                 chunk_count += 1
                 if chunk_count % 10 == 0 and await check_disconnected(request):
                     return
@@ -152,16 +177,20 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             if await check_disconnected(request):
                 return
             yield send("status", {"message": "正在更新创作依据..."})
-            sync_result = await sync_run(llm, fm, project, {
+            async for event in sync_run(llm, fm, project, {
                 "action": "sync",
                 "volume": volume,
                 "chapter": chapter,
                 "chapter_content": full_text,
-            })
-            if sync_result.get("success"):
-                yield send("sync_summary", {"data": sync_result.get("result", {})})
-            else:
-                yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
+            }):
+                if event["type"] == "progress":
+                    yield send("status", {"message": event["message"]})
+                elif event["type"] == "result":
+                    sync_result = event["result"]
+                    if sync_result.get("success"):
+                        yield send("sync_summary", {"data": sync_result.get("result", {})})
+                    else:
+                        yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
 
             # Update project state
             state = fm.get_project_state(project)
@@ -243,9 +272,18 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
 
                 full_text = ""
                 chunk_count = 0
-                async for chunk in stream_result:
-                    full_text += chunk
-                    yield send("text_chunk", {"text": chunk})
+                reasoning_count = 0
+                if isinstance(stream_result, dict):
+                    yield send("error", {"message": stream_result.get("error", "正文生成失败")})
+                    return
+                async for chunk_type, chunk_text in stream_result:
+                    if chunk_type == "reasoning":
+                        reasoning_count += 1
+                        if reasoning_count % 10 == 0:
+                            yield send("status", {"message": "模型思考中..."})
+                        continue
+                    full_text += chunk_text
+                    yield send("text_chunk", {"text": chunk_text})
                     chunk_count += 1
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return
@@ -257,16 +295,20 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                 if await check_disconnected(request):
                     return
                 yield send("status", {"message": "正在更新创作依据..."})
-                sync_result = await sync_run(llm, fm, project, {
+                async for event in sync_run(llm, fm, project, {
                     "action": "sync",
                     "volume": volume,
                     "chapter": chapter,
                     "chapter_content": full_text,
-                })
-                if sync_result.get("success"):
-                    yield send("sync_summary", {"data": sync_result.get("result", {})})
-                else:
-                    yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
+                }):
+                    if event["type"] == "progress":
+                        yield send("status", {"message": event["message"]})
+                    elif event["type"] == "result":
+                        sync_result = event["result"]
+                        if sync_result.get("success"):
+                            yield send("sync_summary", {"data": sync_result.get("result", {})})
+                        else:
+                            yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
 
                 # Update project state
                 state = fm.get_project_state(project)

@@ -188,10 +188,20 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         user_message = f"请根据以下反馈调整第{volume}卷第{chapter}章大纲：{instruction}"
 
     try:
+        stream = params.get("stream", False)
+        if stream:
+            return await llm.chat_with_context(
+                system_prompt=system_prompt,
+                context_docs=context_docs,
+                user_message=user_message,
+                stream=True,
+                max_tokens=8192,
+            )
         result = await llm.chat_with_context(
             system_prompt=system_prompt,
             context_docs=context_docs,
             user_message=user_message,
+            max_tokens=8192,
         )
         return {"success": True, "content": result}
     except Exception as e:

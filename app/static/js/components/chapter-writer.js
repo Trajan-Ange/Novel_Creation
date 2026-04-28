@@ -10,8 +10,8 @@ async function renderChapterWriter() {
       <h2>章节写作</h2>
     </div>
     <div class="write-controls">
-      <label>卷：<input type="number" id="write-vol" value="1" min="1" style="width:60px"></label>
-      <label>章：<input type="number" id="write-ch" value="1" min="1" style="width:60px"></label>
+      <label>卷：<input type="number" id="write-vol" value="${writeState.volume}" min="1" style="width:60px"></label>
+      <label>章：<input type="number" id="write-ch" value="${writeState.chapter}" min="1" style="width:60px"></label>
       <button class="btn btn-primary btn-sm" onclick="startChapterWrite()">开始写作</button>
       <button class="btn btn-secondary btn-sm" onclick="viewWrittenChapter()">查看已写章节</button>
     </div>
@@ -104,12 +104,33 @@ function handleChapterEvent(event, project, vol, ch) {
       addChatMessage('system', `<div class="content">${event.message}</div>`);
       break;
 
+    case 'outline_chunk':
+      if (writeState.phase !== 'outline') {
+        writeState.phase = 'outline';
+        writeState.outlineText = '';
+        addChatMessage('outline', '<div class="label">章节大纲</div><div class="markdown-content streaming-cursor" id="streaming-outline"></div>');
+      }
+      writeState.outlineText = (writeState.outlineText || '') + event.text;
+      const outlineStreamEl = document.getElementById('streaming-outline');
+      if (outlineStreamEl) {
+        outlineStreamEl.innerHTML = marked.parse(writeState.outlineText);
+      }
+      msgs.scrollTop = msgs.scrollHeight;
+      break;
+
     case 'outline':
       writeState.phase = 'review';
-      addChatMessage('outline', `
-        <div class="label">章节大纲</div>
-        <div class="markdown-content">${marked.parse(event.markdown || '')}</div>
-      `);
+      // Replace streaming outline with final version
+      const outlineFinalEl = document.getElementById('streaming-outline');
+      if (outlineFinalEl) {
+        outlineFinalEl.classList.remove('streaming-cursor');
+        outlineFinalEl.innerHTML = marked.parse(event.markdown || '');
+      } else {
+        addChatMessage('outline', `
+          <div class="label">章节大纲</div>
+          <div class="markdown-content">${marked.parse(event.markdown || '')}</div>
+        `);
+      }
 
       if (event.adjusted) {
         addChatMessage('system', '<div class="content">大纲已根据你的反馈调整。是否满意？<br>输入修改意见或回复「确认」开始生成正文。</div>');
@@ -121,7 +142,6 @@ function handleChapterEvent(event, project, vol, ch) {
           </div>
         `);
       }
-      // Add input for feedback
       addChatInput('请输入修改意见或「确认」', (value) => {
         handleOutlineFeedback(value, project, vol, ch);
       });
@@ -129,9 +149,6 @@ function handleChapterEvent(event, project, vol, ch) {
 
     case 'awaiting_confirmation':
       addChatMessage('system', '<div class="content">大纲已生成，请确认。输入修改意见或「确认」。</div>');
-      addChatInput('请输入修改意见或「确认」', (value) => {
-        handleOutlineFeedback(value, project, vol, ch);
-      });
       break;
 
     case 'text_chunk':
@@ -193,6 +210,10 @@ function handleChapterEvent(event, project, vol, ch) {
 }
 
 function addChatInput(placeholder, onSubmit) {
+  // Remove any existing input to prevent duplicates
+  const existing = document.getElementById('chat-input-msg');
+  if (existing) existing.remove();
+
   const msgs = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = 'chat-message system';

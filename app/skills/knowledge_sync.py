@@ -206,7 +206,7 @@ async def _text_analysis(llm, fm, project: str, volume: int, chapter: int,
         system_prompt=ANALYSIS_PROMPT,
         context_docs=context_docs,
         user_message=user_msg,
-        max_tokens=4096,
+        max_tokens=8192,
     )
     return result or ""
 
@@ -242,7 +242,7 @@ async def _extract_events(llm, fm, project: str, volume: int, chapter: int,
     if existing_story:
         context.append({"title": "当前故事时间线（参考）", "content": existing_story[-2000:]})
     user_msg = f"请根据分析报告，提取第{volume}卷第{chapter}章中发生的重要事件。"
-    result = await _call_llm(llm, EVENT_PROMPT, context, user_msg, max_tokens=4096)
+    result = await _call_llm(llm, EVENT_PROMPT, context, user_msg, max_tokens=8192)
     return result.get("json") or {}
 
 
@@ -256,7 +256,7 @@ async def _extract_world(llm, fm, project: str, volume: int, chapter: int,
     if existing_world:
         context.append({"title": "当前世界设定（参考）", "content": existing_world[-3000:]})
     user_msg = f"请根据分析报告，提取第{volume}卷第{chapter}章中出现的新地点和世界设定元素。"
-    result = await _call_llm(llm, WORLD_PROMPT, context, user_msg, max_tokens=4096)
+    result = await _call_llm(llm, WORLD_PROMPT, context, user_msg, max_tokens=8192)
     return result.get("json") or {}
 
 
@@ -270,7 +270,7 @@ async def _extract_relationships(llm, fm, project: str, volume: int, chapter: in
     if existing_rel:
         context.append({"title": "当前人物关系（参考）", "content": existing_rel[-2000:]})
     user_msg = f"请根据分析报告，提取第{volume}卷第{chapter}章中的人物关系变化。"
-    result = await _call_llm(llm, RELATIONSHIP_PROMPT, context, user_msg, max_tokens=4096)
+    result = await _call_llm(llm, RELATIONSHIP_PROMPT, context, user_msg, max_tokens=8192)
     return result.get("json") or {}
 
 
@@ -284,7 +284,7 @@ async def _extract_foreshadowing(llm, fm, project: str, volume: int, chapter: in
     if existing_fb:
         context.append({"title": "当前伏笔清单（参考）", "content": existing_fb[-2000:]})
     user_msg = f"请根据分析报告，提取第{volume}卷第{chapter}章中埋设的新伏笔和回收的旧伏笔。"
-    result = await _call_llm(llm, FORESHADOWING_PROMPT, context, user_msg, max_tokens=4096)
+    result = await _call_llm(llm, FORESHADOWING_PROMPT, context, user_msg, max_tokens=8192)
     return result.get("json") or {}
 
 
@@ -574,8 +574,14 @@ def _update_versions(fm, project: str, changed_cats: set):
 # Main Entry Point
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def run(llm, fm, project: str, params: dict) -> dict:
-    """Run the multi-phase knowledge sync engine.
+async def run(llm, fm, project: str, params: dict):
+    """Run the multi-phase knowledge sync engine (async generator).
+
+    Yields progress events during execution, and a result event at the end.
+
+    Yield format:
+        {"type": "progress", "phase": "...", "message": "..."}
+        {"type": "result", "result": {"success": True/False, ...}}
 
     params:
         action: "sync"
@@ -588,54 +594,64 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     chapter = params.get("chapter", 1)
 
     if not chapter_content:
-        return {"success": False, "error": "No chapter content provided"}
+        yield {"type": "result", "result": {"success": False, "error": "No chapter content provided"}}
+        return
     if len(chapter_content.strip()) < 50:
-        return {"success": False, "error": f"Chapter content too short ({len(chapter_content)} chars)."}
+        yield {"type": "result", "result": {"success": False, "error": f"Chapter content too short ({len(chapter_content)} chars)."}}
+        return
 
     proj_path = fm._project_path(project)
 
     try:
         # ── Phase 1: Text Analysis ──
+        yield {"type": "progress", "phase": "analysis", "message": "正在分析章节内容，提取创作要素..."}
         analysis = await _text_analysis(llm, fm, project, volume, chapter, chapter_content)
         _save_debug(proj_path, chapter, "01_文字分析", analysis)
 
         if not analysis:
-            return {"success": False, "error": "文本分析阶段未返回内容"}
+            yield {"type": "result", "result": {"success": False, "error": "文本分析阶段未返回内容"}}
+            return
 
         # ── Phase 2+3: Category Extraction + File Updates ──
         phase_results = {}
 
         # 2a+3a: Characters
+        yield {"type": "progress", "phase": "characters", "message": "正在提取人物信息并更新角色设定..."}
         char_data = await _extract_characters(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "02_人物提取", json.dumps(char_data, ensure_ascii=False, indent=2))
         char_lines, char_changed = await _process_characters(llm, fm, project, chapter, char_data)
         phase_results["characters"] = {"lines": char_lines, "changed": char_changed, "data": char_data}
 
         # 2b+3b: Events
+        yield {"type": "progress", "phase": "events", "message": "正在提取事件并更新时间线..."}
         event_data = await _extract_events(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "03_事件提取", json.dumps(event_data, ensure_ascii=False, indent=2))
         event_lines, event_changed = await _process_events(llm, fm, project, event_data)
         phase_results["events"] = {"lines": event_lines, "changed": event_changed, "data": event_data}
 
         # 2c+3c: World
+        yield {"type": "progress", "phase": "world", "message": "正在提取世界设定并更新..."}
         world_data = await _extract_world(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "04_世界提取", json.dumps(world_data, ensure_ascii=False, indent=2))
         world_lines, world_changed = await _process_world(llm, fm, project, world_data)
         phase_results["world"] = {"lines": world_lines, "changed": world_changed, "data": world_data}
 
         # 2d+3d: Relationships
+        yield {"type": "progress", "phase": "relationships", "message": "正在提取关系变化并更新人物关系..."}
         rel_data = await _extract_relationships(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "05_关系提取", json.dumps(rel_data, ensure_ascii=False, indent=2))
         rel_lines, rel_changed = await _process_relationships(llm, fm, project, rel_data)
         phase_results["relationships"] = {"lines": rel_lines, "changed": rel_changed, "data": rel_data}
 
         # 2e+3e: Foreshadowing
+        yield {"type": "progress", "phase": "foreshadowing", "message": "正在提取伏笔信息..."}
         fb_data = await _extract_foreshadowing(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "06_伏笔提取", json.dumps(fb_data, ensure_ascii=False, indent=2))
         fb_lines, fb_changed = _process_foreshadowing(fm, project, chapter, fb_data)
         phase_results["foreshadowing"] = {"lines": fb_lines, "changed": fb_changed, "data": fb_data}
 
         # ── Phase 4: Report ──
+        yield {"type": "progress", "phase": "report", "message": "正在生成更新报告..."}
         changed_cats = set()
         for cat_name, key in [
             ("人物设定", "characters"), ("时间线", "events"),
@@ -649,7 +665,6 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         _save_debug(proj_path, chapter, "07_更新报告", summary)
         _update_versions(fm, project, changed_cats)
 
-        # Collect all extracted data
         all_extracted = {
             "characters": phase_results["characters"]["data"],
             "events": phase_results["events"]["data"],
@@ -658,14 +673,14 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             "foreshadowing": phase_results["foreshadowing"]["data"],
         }
 
-        return {
+        yield {"type": "result", "result": {
             "success": True,
             "result": {
                 "summary": summary,
                 "extracted": all_extracted,
                 "full_analysis": analysis,
             },
-        }
+        }}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        yield {"type": "result", "result": {"success": False, "error": str(e)}}

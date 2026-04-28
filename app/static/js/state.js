@@ -40,6 +40,7 @@ function renderContent(section) {
     case 'settings': if (typeof renderSettingsEditor === 'function') renderSettingsEditor(); break;
     case 'outline': if (typeof renderOutlineTree === 'function') renderOutlineTree(); break;
     case 'writing': if (typeof renderChapterWriter === 'function') renderChapterWriter(); break;
+    case 'chapters': if (typeof renderChapterManager === 'function') renderChapterManager(); break;
     case 'foreshadowing': if (typeof renderForeshadowing === 'function') renderForeshadowing(); break;
     case 'query': if (typeof renderQuerySection === 'function') renderQuerySection(); break;
     default: $content.innerHTML = '<div class="empty-state"><h3>未知页面</h3></div>';

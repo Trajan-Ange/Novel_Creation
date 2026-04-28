@@ -24,3 +24,6 @@ env/
 
 # Claude
 .claude/
+
+# Debug / sync outputs
+projects/*/调试/
