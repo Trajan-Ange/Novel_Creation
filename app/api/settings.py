@@ -97,7 +97,7 @@ async def generate_character(request: Request, project: str, body: SettingReques
     result = await run(llm, fm, project, {
         "action": "create",
         "instruction": body.instruction,
-        "char_name": body.instruction.split("，")[0].split(",")[0].strip() if body.instruction else "新角色",
+        "char_name": _extract_char_name(body.instruction) if body.instruction else "新角色",
     })
     if result.get("success") and result.get("char_name"):
         fm.write_character(project, result["char_name"], result["content"])
@@ -334,7 +334,13 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
             if st == "world":
                 fm.write_world_setting(project, full_text)
             elif st == "character":
-                fm.write_character(project, "主角与主要配角", full_text)
+                char_entries = _split_characters(full_text)
+                if char_entries:
+                    for char_name, char_content in char_entries:
+                        if char_name and char_content.strip():
+                            fm.write_character(project, char_name, char_content.strip())
+                else:
+                    fm.write_character(project, "主角与主要配角", full_text)
             elif st == "timeline":
                 fm.write_background_timeline(project, full_text)
             elif st == "relationship":
@@ -555,6 +561,12 @@ def _get_relevant_context(fm, project: str, setting_type: str, volume: int = 1) 
     return "\n".join(parts)
 
 
+def _extract_char_name(instruction: str) -> str:
+    """Extract character name from instruction text like '创建角色：张三' or '新增角色 张三'."""
+    m = re.search(r'(?:创建|新增|添加|生成)(?:角色[：:]\s*)?(.+?)(?:[，,。]|$)', instruction)
+    return m.group(1).strip() if m else "新角色"
+
+
 def _split_characters(markdown_text: str) -> list:
     """Split a multi-character markdown into individual (name, content) pairs.
 
@@ -563,9 +575,13 @@ def _split_characters(markdown_text: str) -> list:
       # 角色名
     Returns a list of (char_name, char_content) tuples.
     """
-    # Find all h1 headers (not h2/h3)
+    # Find all h1 headers first, fall back to h2
     h1_pattern = re.compile(r'^# (.+)$', re.MULTILINE)
     matches = list(h1_pattern.finditer(markdown_text))
+
+    if not matches:
+        h2_pattern = re.compile(r'^## (.+)$', re.MULTILINE)
+        matches = list(h2_pattern.finditer(markdown_text))
 
     if not matches:
         return []

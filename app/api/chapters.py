@@ -14,7 +14,16 @@ class ChapterWriteRequest(BaseModel):
     volume: int = 1
     chapter: int = 1
     instruction: str = ""
-    mode: str = "interactive"  # interactive or auto
+    mode: str = "interactive"  # interactive / auto / continue_outline / continue_text
+    partial_content: str = ""  # user's partial content for AI takeover
+
+
+class ChapterSaveRequest(BaseModel):
+    project: str
+    volume: int = 1
+    chapter: int = 1
+    content: str = ""
+    outline: str = ""
 
 
 class ChapterFeedbackRequest(BaseModel):
@@ -42,6 +51,18 @@ async def get_chapter(request: Request, project: str, volume: int, chapter: int)
     return {"content": content or "", "volume": volume, "chapter": chapter}
 
 
+@router.put("/{project}/volume/{volume}/chapter/{chapter}")
+async def save_chapter(request: Request, project: str, volume: int, chapter: int, body: ChapterSaveRequest):
+    """Save manually written chapter content and/or outline."""
+    fm = request.app.state.fm
+    fm.ensure_volume_dir(project, volume)
+    if body.outline:
+        fm.write_chapter_outline(project, volume, chapter, body.outline)
+    if body.content:
+        fm.write_chapter(project, volume, chapter, body.content)
+    return {"success": True}
+
+
 @router.post("/generate")
 async def generate_chapter(request: Request, body: ChapterWriteRequest):
     """Generate chapter with SSE streaming for interactive flow.
@@ -66,21 +87,85 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
         try:
             fm.ensure_volume_dir(project, volume)
 
-            # Validate that book outline and volume outline exist
-            book_outline = fm.read_book_outline(project)
-            if not book_outline:
-                yield send("error", {
-                    "message": "尚未创建全书大纲。请先前往「大纲管理」生成全书大纲和第" + str(volume) + "卷大纲，再开始章节写作。",
-                    "code": "MISSING_BOOK_OUTLINE"
+            is_takeover = body.mode in ("continue_outline", "continue_text")
+
+            if not is_takeover:
+                # Validate that book outline and volume outline exist
+                book_outline = fm.read_book_outline(project)
+                if not book_outline:
+                    yield send("error", {
+                        "message": "尚未创建全书大纲。请先前往「大纲管理」生成全书大纲和第" + str(volume) + "卷大纲，再开始章节写作。",
+                        "code": "MISSING_BOOK_OUTLINE"
+                    })
+                    return
+
+                vol_outline = fm.read_volume_outline(project, volume)
+                if not vol_outline:
+                    yield send("error", {
+                        "message": "尚未创建第" + str(volume) + "卷大纲。请先前往「大纲管理」生成第" + str(volume) + "卷大纲，再开始章节写作。",
+                        "code": "MISSING_VOLUME_OUTLINE"
+                    })
+                    return
+
+            # Handle AI takeover for outline continuation
+            if body.mode == "continue_outline":
+                yield send("status", {"message": "AI 正在补全大纲..."})
+                instruction = f"请补全以下章节大纲，保持风格和结构一致，不要重复已有内容，从断点处自然延续：\n\n{body.partial_content}"
+                existing_outline = fm.read_chapter_outline(project, volume, chapter)
+                outline_stream = await outline_run(llm, fm, project, {
+                    "action": "create_chapter",
+                    "volume": volume,
+                    "chapter": chapter,
+                    "instruction": instruction,
+                    "existing_chapter_outline": existing_outline,
+                    "stream": True,
                 })
+                if isinstance(outline_stream, dict):
+                    yield send("error", {"message": outline_stream.get("error", "大纲生成失败")})
+                    return
+                outline_content = ""
+                async for chunk_type, chunk_text in outline_stream:
+                    if chunk_type == "reasoning":
+                        continue
+                    outline_content += chunk_text
+                    yield send("outline_chunk", {"text": chunk_text})
+                try:
+                    fm.write_chapter_outline(project, volume, chapter, outline_content)
+                except Exception as e:
+                    yield send("error", {"message": f"大纲保存失败：{e}"})
+                    return
+                yield send("outline", {"markdown": outline_content})
+                yield send("done", {"message": "大纲补全完成"})
                 return
 
-            vol_outline = fm.read_volume_outline(project, volume)
-            if not vol_outline:
-                yield send("error", {
-                    "message": "尚未创建第" + str(volume) + "卷大纲。请先前往「大纲管理」生成第" + str(volume) + "卷大纲，再开始章节写作。",
-                    "code": "MISSING_VOLUME_OUTLINE"
+            # Handle AI takeover for text continuation
+            if body.mode == "continue_text":
+                yield send("status", {"message": "AI 正在续写正文..."})
+                existing_outline = fm.read_chapter_outline(project, volume, chapter)
+                instruction = f"请续写以下章节正文，从断点处自然延续，保持文风和情节一致：\n\n{body.partial_content}"
+                stream = await chapter_run(llm, fm, project, {
+                    "action": "write",
+                    "volume": volume,
+                    "chapter": chapter,
+                    "instruction": instruction,
+                    "stream": True,
                 })
+                full_text = ""
+                if isinstance(stream, dict):
+                    yield send("error", {"message": stream.get("error", "正文生成失败")})
+                    return
+                async for chunk_type, chunk_text in stream:
+                    if chunk_type == "reasoning":
+                        continue
+                    full_text += chunk_text
+                    yield send("text_chunk", {"text": chunk_text})
+                try:
+                    fm.write_chapter(project, volume, chapter, full_text)
+                except Exception as e:
+                    yield send("error", {"message": f"章节保存失败：{e}"})
+                    return
+                yield send("text_complete", {"full_text": full_text})
+                yield send("done", {"message": "正文续写完成"})
                 return
 
             # Step 1: Generate chapter outline with streaming
@@ -118,7 +203,11 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 if chunk_count % 5 == 0 and await check_disconnected(request):
                     return
 
-            fm.write_chapter_outline(project, volume, chapter, outline_content)
+            try:
+                fm.write_chapter_outline(project, volume, chapter, outline_content)
+            except Exception as e:
+                yield send("error", {"message": f"大纲保存失败：{e}"})
+                return
             yield send("outline", {"markdown": outline_content})
 
             # Step 2: Wait for user confirmation or feedback
@@ -170,13 +259,18 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 if chunk_count % 10 == 0 and await check_disconnected(request):
                     return
 
-            fm.write_chapter(project, volume, chapter, full_text)
+            try:
+                fm.write_chapter(project, volume, chapter, full_text)
+            except Exception as e:
+                yield send("error", {"message": f"章节保存失败：{e}"})
+                return
             yield send("text_complete", {"full_text": full_text})
 
             # Step 5: Knowledge sync
             if await check_disconnected(request):
                 return
             yield send("status", {"message": "正在更新创作依据..."})
+            sync_ok = True
             async for event in sync_run(llm, fm, project, {
                 "action": "sync",
                 "volume": volume,
@@ -190,7 +284,11 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                     if sync_result.get("success"):
                         yield send("sync_summary", {"data": sync_result.get("result", {})})
                     else:
+                        sync_ok = False
                         yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
+
+            if not sync_ok:
+                return
 
             # Update project state
             state = fm.get_project_state(project)
@@ -239,7 +337,11 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
 
                 if outline_result.get("success"):
                     outline_content = outline_result["content"]
-                    fm.write_chapter_outline(project, volume, chapter, outline_content)
+                    try:
+                        fm.write_chapter_outline(project, volume, chapter, outline_content)
+                    except Exception as e:
+                        yield send("error", {"message": f"大纲保存失败：{e}"})
+                        return
                     yield send("outline", {"markdown": outline_content, "adjusted": True})
                 else:
                     yield send("error", {"message": outline_result.get("error", "大纲调整失败")})
@@ -288,13 +390,18 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return
 
-                fm.write_chapter(project, volume, chapter, full_text)
+                try:
+                    fm.write_chapter(project, volume, chapter, full_text)
+                except Exception as e:
+                    yield send("error", {"message": f"章节保存失败：{e}"})
+                    return
                 yield send("text_complete", {"full_text": full_text})
 
                 # Knowledge sync
                 if await check_disconnected(request):
                     return
                 yield send("status", {"message": "正在更新创作依据..."})
+                sync_ok = True
                 async for event in sync_run(llm, fm, project, {
                     "action": "sync",
                     "volume": volume,
@@ -308,7 +415,11 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                         if sync_result.get("success"):
                             yield send("sync_summary", {"data": sync_result.get("result", {})})
                         else:
+                            sync_ok = False
                             yield send("error", {"message": f"知识同步失败：{sync_result.get('error', '未知错误')}", "code": "SYNC_FAILED"})
+
+                if not sync_ok:
+                    return
 
                 # Update project state
                 state = fm.get_project_state(project)

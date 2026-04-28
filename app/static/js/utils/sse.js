@@ -1,9 +1,11 @@
 /** Server-Sent Events handler */
 class SSEClient {
-  constructor() {
+  constructor(options = {}) {
     this.abortController = null;
     this.onEvent = null;
     this.onError = null;
+    this.timeout = options.timeout || 300000; // 5 min default
+    this._timeoutId = null;
   }
 
   async connect(url, options = {}) {
@@ -11,6 +13,12 @@ class SSEClient {
     this.abortController = new AbortController();
 
     const { method = 'POST', body, headers = {} } = options;
+
+    // Set up timeout
+    this._timeoutId = setTimeout(() => {
+      this.abortController.abort();
+      if (this.onError) this.onError(new Error('SSE 连接超时'));
+    }, this.timeout);
 
     try {
       const response = await fetch(url, {
@@ -38,7 +46,7 @@ class SSEClient {
               const data = JSON.parse(line.slice(6));
               if (this.onEvent) this.onEvent(data);
             } catch (e) {
-              // Ignore parse errors for partial chunks
+              console.error('SSE parse error:', e, 'data:', line.slice(6).substring(0, 200));
             }
           }
         }
@@ -47,10 +55,15 @@ class SSEClient {
       if (err.name !== 'AbortError' && this.onError) {
         this.onError(err);
       }
+    } finally {
+      clearTimeout(this._timeoutId);
+      this._timeoutId = null;
     }
   }
 
   disconnect() {
+    clearTimeout(this._timeoutId);
+    this._timeoutId = null;
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;

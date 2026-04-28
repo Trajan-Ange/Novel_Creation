@@ -36,6 +36,7 @@
           <li data-section="chapters">章节管理</li>
           <li data-section="foreshadowing">伏笔管理</li>
           <li data-section="query">智能查询</li>
+          <li class="nav-back" data-section="projects">← 返回项目列表</li>
         </ul>
       </div>
     </nav>
@@ -121,6 +122,11 @@
 </div>
 
 <script src="/js/utils/sse.js?v=2"></script>
+<!-- Context Menu -->
+<div id="context-menu" class="context-menu" style="display:none">
+  <div class="context-menu-item danger" data-action="delete-project">删除项目</div>
+</div>
+
 <script src="/js/utils/helpers.js?v=2"></script>
 <script src="/js/api.js?v=2"></script>
 <script src="/js/state.js?v=2"></script>

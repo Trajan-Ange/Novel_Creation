@@ -175,7 +175,9 @@ async def _call_llm(llm, system_prompt: str, context_docs: list, user_message: s
             user_message=user_message,
             max_tokens=max_tokens,
         )
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"LLM call failed in sync phase: {e}")
         return {"content": "", "json": None}
 
 
@@ -450,7 +452,7 @@ async def _process_relationships(llm, fm, project: str, data: dict) -> list:
     return lines, False
 
 
-def _process_foreshadowing(fm, project: str, chapter: int, data: dict) -> list:
+def _process_foreshadowing(fm, project: str, volume: int, chapter: int, data: dict) -> list:
     """Write new foreshadowing files and update recovered ones. Returns summary lines."""
     lines = []
 
@@ -458,7 +460,7 @@ def _process_foreshadowing(fm, project: str, chapter: int, data: dict) -> list:
     for idx, fb in enumerate(data.get("new_foreshadowing", []), start=1):
         fb_content = fb.get("content", "") if isinstance(fb, dict) else str(fb)
         if fb_content:
-            fb_id = f"FB-{chapter:03d}-{idx:02d}"
+            fb_id = f"FB-{volume:02d}-{chapter:03d}-{idx:02d}"
             related = fb.get("related_characters", []) if isinstance(fb, dict) else []
             suggested = fb.get("suggested_recovery_chapter", "待定") if isinstance(fb, dict) else "待定"
             detail = (
@@ -539,7 +541,7 @@ def _generate_report(volume: int, chapter: int, chapter_len: int,
         parts.append("> ⚠️ 本次同步未产生任何文件更新。可能原因：\n"
                       "> 1. 本章确无新增设定元素\n"
                       "> 2. LLM 提取结果为空\n"
-                      "> 详情请查看调试文件：`项目目录/调试/同步_*_第{chapter}章.txt`\n")
+                      f"> 详情请查看调试文件：`项目目录/调试/同步_*_第{chapter}章.txt`\n")
 
     parts.append(f"## 更新统计\n已修改模块：{', '.join(sorted(changed_cats)) if changed_cats else '无'}")
     parts.append(f"提取步骤：文字分析 → 人物/事件/世界/关系/伏笔 分类提取 → 分步更新")
@@ -647,7 +649,7 @@ async def run(llm, fm, project: str, params: dict):
         yield {"type": "progress", "phase": "foreshadowing", "message": "正在提取伏笔信息..."}
         fb_data = await _extract_foreshadowing(llm, fm, project, volume, chapter, analysis)
         _save_debug(proj_path, chapter, "06_伏笔提取", json.dumps(fb_data, ensure_ascii=False, indent=2))
-        fb_lines, fb_changed = _process_foreshadowing(fm, project, chapter, fb_data)
+        fb_lines, fb_changed = _process_foreshadowing(fm, project, volume, chapter, fb_data)
         phase_results["foreshadowing"] = {"lines": fb_lines, "changed": fb_changed, "data": fb_data}
 
         # ── Phase 4: Report ──

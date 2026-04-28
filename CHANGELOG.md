@@ -89,6 +89,63 @@
 
 ---
 
+## v0.1.3 (2026-04-28)
+
+### 新功能 — 手动创作与用户体验增强
+
+**返回项目列表：** 项目内导航栏新增"← 返回项目列表"入口，点击清除当前项目并回到初始 UI。
+
+**右键快捷菜单：** 侧边栏项目列表支持右键弹出上下文菜单，可快速删除项目（含确认对话框）。
+
+**手动章节创作（含 AI 接管）：**
+- 章节写作页面新增"手动创作"按钮，进入两阶段编辑器
+- **阶段 1 — 大纲编辑**：Markdown 文本编辑器，支持手动编写或点击"AI 接管大纲"让 AI 流式补全
+- **阶段 2 — 正文编辑**：Markdown 文本编辑器，支持手动编写或点击"AI 接管正文"让 AI 从已有内容续写
+- 大纲保存后自动切换到正文阶段，正文保存后自动触发知识同步
+- 后端新增 `PUT /api/chapters/{project}/volume/{vol}/chapter/{ch}` 端点
+- AI 接管通过扩展的 generate 端点实现（`mode: continue_outline` / `continue_text`，`partial_content` 字段）
+
+### 严重缺陷修复（代码审查）
+
+- **C1 — sync.py 独立同步端点不可用**：`await sync_run()` 改为 `async for event in sync_run()` 迭代收集结果
+- **C3 — 角色名路径遍历防护**：`file_manager.py` 新增 `_validate_char_name()` 方法，拒绝 `../`、`\\`、`/` 等字符
+- **C4 — 原子文件写入**：`_write_file` / `_write_json` 改为先写 `.tmp` 临时文件再 `os.replace` 原子重命名
+- **C5 — 章节写入失败不再静默**：`write_chapter_outline` 和 `write_chapter` 包装 try/except，失败时发送 error SSE 事件并 return
+- **C6 — 同步失败时不再发送 done 事件**：同步失败时发送 error 后直接 return，跳过项目状态更新
+
+### 中等缺陷修复
+
+- **M1 — 删除项目异常处理**：`shutil.rmtree` 包装 try/except，抛出 `RuntimeError`
+- **M3 — 角色拆分支持 H2 标题**：`_split_characters()` 在 h1 匹配为空时回退到 h2 标题
+- **M4 — 角色名提取增强**：用正则从指令中提取实际角色名（匹配"创建角色：张三"等模式）
+- **M7 — 伏笔 ID 包含卷号**：`FB-{chapter}-{idx}` → `FB-{volume:02d}-{chapter:03d}-{idx:02d}`
+- **M8 — 更新报告 f-string 修复**：普通字符串改为 f-string 正确显示章节号
+- **M10 — 流式生成角色拆分保存**：`_split_characters()` 拆分后逐个写入独立角色文件
+
+### 前端修复
+
+- **SSE 导航清理**：`navigate()` 开头断开 `chapterSSE` / `outlineStreamingClient` / `settingsChatClient`
+- **H2 — LLM 错误日志记录**：`knowledge_sync.py` `_call_llm` 异常时记录 warning 日志
+- **H8 — SSE 超时机制**：`SSEClient` 构造函数支持 `timeout` 参数（默认 5 分钟）
+- **H9 — SSE JSON 解析错误日志**：catch 块添加 `console.error` 输出
+
+### 涉及文件
+
+- `app/api/sync.py`（C1 修复）
+- `app/api/chapters.py`（C5/C6 修复 + PUT 端点 + AI 接管模式）
+- `app/api/settings.py`（M3/M4/M10 修复）
+- `app/skills/knowledge_sync.py`（H2/M7/M8 修复）
+- `app/storage/file_manager.py`（C3/C4/M1 修复）
+- `app/static/index.html`（返回按钮 + 右键菜单 DOM）
+- `app/static/js/state.js`（SSE 清理 + 返回导航）
+- `app/static/js/app.js`（右键菜单事件 + 返回导航事件）
+- `app/static/js/components/chapter-writer.js`（手动编辑器 + AI 接管）
+- `app/static/js/api.js`（新增 chapters.save API）
+- `app/static/js/utils/sse.js`（超时 + 错误日志）
+- `app/static/css/main.css`（context-menu / manual-editor / chat 样式）
+
+---
+
 ## v0.1.0 (2026-04-27)
 
 ### 安全修复

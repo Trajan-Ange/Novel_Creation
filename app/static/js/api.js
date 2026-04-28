@@ -122,6 +122,8 @@ const API = {
     list: (project, vol) => API.get(`/api/chapters/${encodeURIComponent(project)}/volume/${vol}`),
     get: (project, vol, ch) =>
       API.get(`/api/chapters/${encodeURIComponent(project)}/volume/${vol}/chapter/${ch}`),
+    save: (project, vol, ch, content, outline) =>
+      API.put(`/api/chapters/${encodeURIComponent(project)}/volume/${vol}/chapter/${ch}`, { project, content, outline }),
     foreshadowing: (project) => API.get(`/api/chapters/${encodeURIComponent(project)}/foreshadowing`),
     query: (project, query) =>
       API.post('/api/chapters/query', { project, query }),

@@ -30,12 +30,15 @@ async def trigger_sync(request: Request, project: str, body: SyncRequest):
     if not chapter_content:
         raise HTTPException(status_code=404, detail={"success": False, "error": f"第{body.volume}卷第{body.chapter}章不存在"})
 
-    result = await run(llm, fm, project, {
+    result = {"success": False, "error": "同步未产生结果"}
+    async for event in run(llm, fm, project, {
         "action": "sync",
         "volume": body.volume,
         "chapter": body.chapter,
         "chapter_content": chapter_content,
-    })
+    }):
+        if event["type"] == "result":
+            result = event["result"]
     return result
 
 

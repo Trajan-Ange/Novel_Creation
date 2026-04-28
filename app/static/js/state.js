@@ -7,6 +7,11 @@ const AppState = {
 const $content = document.getElementById('content');
 
 function navigate(section) {
+  // Disconnect active SSE clients before destroying DOM
+  if (typeof chapterSSE !== 'undefined' && chapterSSE) { chapterSSE.disconnect(); chapterSSE = null; }
+  if (typeof outlineStreamingClient !== 'undefined' && outlineStreamingClient) { outlineStreamingClient.disconnect(); outlineStreamingClient = null; }
+  if (typeof settingsChatClient !== 'undefined' && settingsChatClient) { settingsChatClient.disconnect(); settingsChatClient = null; }
+
   AppState.currentSection = section;
   document.querySelectorAll('#sidebar li[data-section]').forEach(el => {
     el.classList.toggle('active', el.dataset.section === section);
@@ -25,6 +30,8 @@ function setProject(name) {
   if (nav) nav.style.display = name ? 'block' : 'none';
   if (name) {
     navigate('dashboard');
+  } else {
+    navigate('projects');
   }
 }
 

@@ -12,7 +12,8 @@ async function renderChapterWriter() {
     <div class="write-controls">
       <label>卷：<input type="number" id="write-vol" value="${writeState.volume}" min="1" style="width:60px"></label>
       <label>章：<input type="number" id="write-ch" value="${writeState.chapter}" min="1" style="width:60px"></label>
-      <button class="btn btn-primary btn-sm" onclick="startChapterWrite()">开始写作</button>
+      <button class="btn btn-primary btn-sm" onclick="startChapterWrite()">AI 写作</button>
+      <button class="btn btn-secondary btn-sm" onclick="renderManualWriter()">手动创作</button>
       <button class="btn btn-secondary btn-sm" onclick="viewWrittenChapter()">查看已写章节</button>
     </div>
     <div id="chapter-chat" class="chat-container">
@@ -292,4 +293,211 @@ async function viewWrittenChapter() {
   } catch (e) {
     addChatMessage('system', `<div class="content error-message">加载失败</div>`);
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// Manual Chapter Writing
+// ══════════════════════════════════════════════════════════════
+
+let manualState = { phase: 'outline', vol: 1, ch: 1 };
+
+function renderManualWriter(presetVol, presetCh) {
+  const vol = presetVol || parseInt(document.getElementById('write-vol').value) || 1;
+  const ch = presetCh || parseInt(document.getElementById('write-ch').value) || 1;
+  manualState = { phase: 'outline', vol, ch };
+
+  // Load existing content if any
+  Promise.all([
+    API.outline.chapter(AppState.currentProject, vol, ch),
+    API.chapters.get(AppState.currentProject, vol, ch),
+  ]).then(([outlineData, chapterData]) => {
+    const existingOutline = outlineData.content || '';
+    const existingText = chapterData.content || '';
+
+    $content.innerHTML = `
+      <div class="section-header">
+        <h2>手动创作 — 第${vol}卷第${ch}章</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-secondary" onclick="renderChapterWriter()">← 返回</button>
+        </div>
+      </div>
+
+      <div id="manual-writer">
+        <div class="manual-phase-tabs" style="margin-bottom:16px">
+          <button id="tab-outline-btn" class="btn btn-primary btn-sm" onclick="switchManualPhase('outline')">阶段 1：大纲</button>
+          <button id="tab-text-btn" class="btn btn-sm btn-secondary" onclick="switchManualPhase('text')">阶段 2：正文</button>
+        </div>
+
+        <div id="manual-outline-section">
+          <label style="font-weight:600;display:block;margin-bottom:8px">章节大纲</label>
+          <textarea id="manual-outline-editor" class="manual-editor-textarea"
+            placeholder="在此编写章节大纲...&#10;&#10;## 本章定位&#10;- &#10;&#10;## 核心事件&#10;1. &#10;2. &#10;&#10;## 人物目标&#10;- &#10;&#10;输入部分内容后，可点击「AI 接管」让 AI 帮你补全。"
+            style="width:100%;min-height:300px;font-family:inherit;font-size:14px;padding:12px;border:1px solid #ddd;border-radius:8px;resize:vertical"
+          >${existingOutline}</textarea>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="aiTakeoverOutline()">AI 接管大纲</button>
+            <button class="btn btn-success btn-sm" onclick="saveManualOutline()">保存大纲</button>
+          </div>
+          <div id="manual-outline-status" style="margin-top:8px;font-size:13px;color:#666"></div>
+        </div>
+
+        <div id="manual-text-section" style="display:none">
+          <label style="font-weight:600;display:block;margin-bottom:8px">章节正文</label>
+          <textarea id="manual-text-editor" class="manual-editor-textarea"
+            placeholder="在此编写章节正文...&#10;&#10;输入部分内容后，可点击「AI 接管」让 AI 从断点处续写。"
+            style="width:100%;min-height:400px;font-family:inherit;font-size:14px;padding:12px;border:1px solid #ddd;border-radius:8px;resize:vertical"
+          >${existingText}</textarea>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="aiTakeoverText()">AI 接管正文</button>
+            <button class="btn btn-success btn-sm" onclick="saveManualText()">保存并更新</button>
+          </div>
+          <div id="manual-text-status" style="margin-top:8px;font-size:13px;color:#666"></div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function switchManualPhase(phase) {
+  manualState.phase = phase;
+  document.getElementById('manual-outline-section').style.display = phase === 'outline' ? 'block' : 'none';
+  document.getElementById('manual-text-section').style.display = phase === 'text' ? 'block' : 'none';
+  document.getElementById('tab-outline-btn').className = 'btn btn-sm ' + (phase === 'outline' ? 'btn-primary' : 'btn-secondary');
+  document.getElementById('tab-text-btn').className = 'btn btn-sm ' + (phase === 'text' ? 'btn-primary' : 'btn-secondary');
+}
+
+async function saveManualOutline() {
+  const project = AppState.currentProject;
+  const content = document.getElementById('manual-outline-editor').value;
+  const statusEl = document.getElementById('manual-outline-status');
+
+  try {
+    await API.outline.saveChapter(project, manualState.vol, manualState.ch, content);
+    statusEl.innerHTML = '<span style="color:#27ae60">大纲已保存 ✓</span>';
+    // Switch to text phase
+    switchManualPhase('text');
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:#e74c3c">保存失败：${e.message}</span>`;
+  }
+}
+
+async function saveManualText() {
+  const project = AppState.currentProject;
+  const content = document.getElementById('manual-text-editor').value;
+  const statusEl = document.getElementById('manual-text-status');
+
+  try {
+    await API.chapters.save(project, manualState.vol, manualState.ch, content, '');
+    statusEl.innerHTML = '<span style="color:#27ae60">正文已保存 ✓ 正在触发知识同步...</span>';
+
+    // Trigger sync
+    try {
+      const result = await API.sync.trigger(project, manualState.vol, manualState.ch);
+      if (result.success) {
+        statusEl.innerHTML = '<span style="color:#27ae60">正文已保存，创作依据已更新 ✓</span>';
+      } else {
+        statusEl.innerHTML = `<span style="color:#e67e22">正文已保存，但同步可能未完成：${result.error || ''}</span>`;
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:#e67e22">正文已保存，但同步请求失败：${e.message}</span>`;
+    }
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:#e74c3c">保存失败：${e.message}</span>`;
+  }
+}
+
+function aiTakeoverOutline() {
+  const project = AppState.currentProject;
+  const vol = manualState.vol;
+  const ch = manualState.ch;
+  const partialContent = document.getElementById('manual-outline-editor').value || '';
+
+  const statusEl = document.getElementById('manual-outline-status');
+  statusEl.innerHTML = '<span style="color:#3498db">AI 正在补全大纲...</span>';
+
+  chapterSSE = new SSEClient();
+  chapterSSE.onEvent = (event) => {
+    switch (event.type) {
+      case 'status':
+        statusEl.innerHTML = `<span style="color:#3498db">${event.message}</span>`;
+        break;
+      case 'outline_chunk':
+        const editor = document.getElementById('manual-outline-editor');
+        editor.value += event.text;
+        editor.scrollTop = editor.scrollHeight;
+        break;
+      case 'outline':
+        const ed = document.getElementById('manual-outline-editor');
+        // Only replace if AI generated something new beyond the partial
+        if (event.markdown && event.markdown.length > partialContent.length) {
+          ed.value = event.markdown;
+          ed.scrollTop = ed.scrollHeight;
+        }
+        break;
+      case 'done':
+        statusEl.innerHTML = '<span style="color:#27ae60">AI 接管完成 ✓ 请检查并保存。</span>';
+        break;
+      case 'error':
+        statusEl.innerHTML = `<span style="color:#e74c3c">AI 接管失败：${event.message}</span>`;
+        break;
+    }
+  };
+  chapterSSE.onError = (err) => {
+    statusEl.innerHTML = `<span style="color:#e74c3c">连接出错：${err.message}</span>`;
+  };
+
+  chapterSSE.connect('/api/chapters/generate', {
+    body: {
+      project, volume: vol, chapter: ch,
+      mode: 'continue_outline',
+      partial_content: partialContent,
+      instruction: '',
+    },
+  });
+}
+
+function aiTakeoverText() {
+  const project = AppState.currentProject;
+  const vol = manualState.vol;
+  const ch = manualState.ch;
+  const partialContent = document.getElementById('manual-text-editor').value || '';
+
+  const statusEl = document.getElementById('manual-text-status');
+  statusEl.innerHTML = '<span style="color:#3498db">AI 正在续写正文...</span>';
+
+  chapterSSE = new SSEClient();
+  chapterSSE.onEvent = (event) => {
+    switch (event.type) {
+      case 'status':
+        statusEl.innerHTML = `<span style="color:#3498db">${event.message}</span>`;
+        break;
+      case 'text_chunk':
+        const editor = document.getElementById('manual-text-editor');
+        editor.value += event.text;
+        editor.scrollTop = editor.scrollHeight;
+        break;
+      case 'text_complete':
+        statusEl.innerHTML = '<span style="color:#27ae60">AI 续写完成 ✓ 请检查后保存。</span>';
+        break;
+      case 'done':
+        statusEl.innerHTML = '<span style="color:#27ae60">AI 续写完成 ✓ 请检查后保存。</span>';
+        break;
+      case 'error':
+        statusEl.innerHTML = `<span style="color:#e74c3c">AI 续写失败：${event.message}</span>`;
+        break;
+    }
+  };
+  chapterSSE.onError = (err) => {
+    statusEl.innerHTML = `<span style="color:#e74c3c">连接出错：${err.message}</span>`;
+  };
+
+  chapterSSE.connect('/api/chapters/generate', {
+    body: {
+      project, volume: vol, chapter: ch,
+      mode: 'continue_text',
+      partial_content: partialContent,
+      instruction: '',
+    },
+  });
 }

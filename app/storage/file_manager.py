@@ -27,6 +27,13 @@ class FileManager:
         if not name or not re.match(r'^[\w一-鿿\s\-]+$', name):
             raise ValueError(f"Invalid project name: {name}")
 
+    def _validate_char_name(self, name: str):
+        """Character names: must not contain path separators or special filesystem chars."""
+        if not name or not re.match(r'^[^\x00-\x1f\\/:*?"<>|]+$', name):
+            raise ValueError(f"Invalid character name: {name}")
+        if len(name) > 100:
+            raise ValueError("Character name too long (max 100 characters)")
+
     def _validate_path(self, path: str) -> str:
         """Resolve real path and verify it stays under projects_root.
         Prevents symlink and directory traversal attacks.
@@ -46,8 +53,10 @@ class FileManager:
 
     def _write_file(self, path: str, content: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             f.write(content)
+        os.replace(tmp, path)
 
     def _read_json(self, path: str) -> dict:
         try:
@@ -58,8 +67,10 @@ class FileManager:
 
     def _write_json(self, path: str, data: dict):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
     # ── Project lifecycle ──────────────────────────────────────
 
@@ -124,7 +135,10 @@ class FileManager:
         self._validate_name(name)
         proj_path = self._project_path(name)
         if os.path.exists(proj_path):
-            shutil.rmtree(proj_path)
+            try:
+                shutil.rmtree(proj_path)
+            except OSError as e:
+                raise RuntimeError(f"无法删除项目 '{name}'：{e}")
 
     def get_project_state(self, name: str) -> dict:
         path = os.path.join(self._project_path(name), "项目状态.json")
@@ -147,9 +161,11 @@ class FileManager:
         self._write_file(self._settings_path(project, "世界设定.md"), content)
 
     def read_character(self, project: str, char_name: str) -> Optional[str]:
+        self._validate_char_name(char_name)
         return self._read_file(self._settings_path(project, f"人物设定/{char_name}.md"))
 
     def write_character(self, project: str, char_name: str, content: str):
+        self._validate_char_name(char_name)
         self._write_file(self._settings_path(project, f"人物设定/{char_name}.md"), content)
 
     def list_characters(self, project: str) -> list[str]:
@@ -163,6 +179,7 @@ class FileManager:
         ]
 
     def delete_character(self, project: str, char_name: str):
+        self._validate_char_name(char_name)
         path = self._settings_path(project, f"人物设定/{char_name}.md")
         if os.path.exists(path):
             os.remove(path)
