@@ -57,22 +57,6 @@ def build_truncated_context_parts(fm, project: str) -> list[str]:
     return parts
 
 
-def build_full_context(fm, project: str) -> str:
-    """Build a complete context string from all project settings.
-
-    Replaces the repeated inline pattern:
-        context_docs = fm.get_all_settings(project)
-        context_parts = [...]
-        for doc in context_docs: ...
-    """
-    docs = fm.get_all_settings(project)
-    parts = ["参考以下已有资料：\n"]
-    for doc in docs:
-        parts.append(f"【{doc['title']}】")
-        parts.append(doc["content"])
-        parts.append("")
-    return "\n".join(parts)
-
 
 def build_targeted_context(fm, project: str, setting_type: str, volume: int = 1) -> str:
     """Build a context string from settings relevant to the given type.

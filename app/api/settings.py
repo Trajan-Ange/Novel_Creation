@@ -49,6 +49,37 @@ class StreamGenerateRequest(BaseModel):
     chapter: int = 1
 
 
+def _save_setting_by_type(fm, project: str, st: str, full_text: str, body):
+    """Save generated content to the appropriate file based on setting type."""
+    if st == "world":
+        fm.write_world_setting(project, full_text)
+    elif st == "character":
+        char_entries = _split_characters(full_text)
+        if char_entries:
+            for char_name, char_content in char_entries:
+                if char_name and char_content.strip():
+                    fm.write_character(project, char_name, char_content.strip())
+        else:
+            fm.write_character(project, "新角色", full_text)
+    elif st == "timeline":
+        bg, story = split_timeline_content(full_text)
+        if bg:
+            fm.write_background_timeline(project, bg)
+        if story:
+            fm.write_story_timeline(project, story)
+    elif st == "relationship":
+        fm.write_relationship(project, full_text)
+    elif st == "style":
+        fm.write_style_guide(project, full_text)
+    elif st == "book_outline":
+        fm.write_book_outline(project, full_text)
+    elif st == "volume_outline":
+        fm.write_volume_outline(project, body.volume, full_text)
+    elif st == "chapter_outline":
+        fm.ensure_volume_dir(project, body.volume)
+        fm.write_chapter_outline(project, body.volume, body.chapter, full_text)
+
+
 @router.get("/{project}/all")
 async def get_all_settings(request: Request, project: str):
     """Get all settings as context documents."""
@@ -321,35 +352,7 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 if chunk_count % 10 == 0 and await check_disconnected(request):
                     return
 
-            # Save to appropriate file
-            if st == "world":
-                fm.write_world_setting(project, full_text)
-            elif st == "character":
-                char_entries = _split_characters(full_text)
-                if char_entries:
-                    for char_name, char_content in char_entries:
-                        if char_name and char_content.strip():
-                            fm.write_character(project, char_name, char_content.strip())
-                else:
-                    fm.write_character(project, "主角与主要配角", full_text)
-            elif st == "timeline":
-                bg, story = split_timeline_content(full_text)
-                if bg:
-                    fm.write_background_timeline(project, bg)
-                if story:
-                    fm.write_story_timeline(project, story)
-            elif st == "relationship":
-                fm.write_relationship(project, full_text)
-            elif st == "style":
-                fm.write_style_guide(project, full_text)
-            elif st == "book_outline":
-                fm.write_book_outline(project, full_text)
-            elif st == "volume_outline":
-                fm.write_volume_outline(project, body.volume, full_text)
-            elif st == "chapter_outline":
-                fm.ensure_volume_dir(project, body.volume)
-                fm.write_chapter_outline(project, body.volume, body.chapter, full_text)
-
+            _save_setting_by_type(fm, project, st, full_text, body)
             yield send("complete", {"content": full_text, "setting_type": st})
 
         except Exception as e:
@@ -716,34 +719,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                     if chunk_count % 10 == 0 and await check_disconnected(request):
                         return
 
-                if st == "world":
-                    fm.write_world_setting(project, full_text)
-                elif st == "character":
-                    char_entries = _split_characters(full_text)
-                    if char_entries:
-                        for char_name, char_content in char_entries:
-                            if char_name and char_content.strip():
-                                fm.write_character(project, char_name, char_content.strip())
-                    else:
-                        fm.write_character(project, "新角色", full_text)
-                elif st == "timeline":
-                    bg, story = split_timeline_content(full_text)
-                    if bg:
-                        fm.write_background_timeline(project, bg)
-                    if story:
-                        fm.write_story_timeline(project, story)
-                elif st == "relationship":
-                    fm.write_relationship(project, full_text)
-                elif st == "style":
-                    fm.write_style_guide(project, full_text)
-                elif st == "book_outline":
-                    fm.write_book_outline(project, full_text)
-                elif st == "volume_outline":
-                    fm.write_volume_outline(project, body.volume, full_text)
-                elif st == "chapter_outline":
-                    fm.ensure_volume_dir(project, body.volume)
-                    fm.write_chapter_outline(project, body.volume, body.chapter, full_text)
-
+                _save_setting_by_type(fm, project, st, full_text, body)
                 yield send("complete", {
                     "content": full_text,
                     "phase": "generation",

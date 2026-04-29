@@ -32,7 +32,7 @@ async function createProject() {
   if (type === '二创') {
     const source = document.getElementById('lore-source').value.trim();
     if (source) {
-      $content.innerHTML = `<div class="loading">正在采集《${source}》的世界观设定...</div>`;
+      $content.innerHTML = `<div class="loading">正在采集《${escapeHtml(source)}》的世界观设定...</div>`;
       closeProjectModal();
 
       const loreResult = await API.sync.loreExtract(name, source, [], description);
@@ -79,8 +79,8 @@ function updateSidebarProjects() {
   const nav = document.getElementById('nav-projects');
   API.projects.list().then(projects => {
     nav.innerHTML = projects.map(p => `
-      <li data-project="${p.name}">${p.name}
-        <span style="float:right;font-size:11px;color:#95a5a6">${p.stage || ''}</span>
+      <li data-project="${escapeHtml(p.name)}">${escapeHtml(p.name)}
+        <span style="float:right;font-size:11px;color:#95a5a6">${escapeHtml(p.stage || '')}</span>
       </li>
     `).join('') + `<li class="nav-create">+ 创建新项目</li>`;
     if (projects.length === 0) {
@@ -110,7 +110,7 @@ let wizardState = {
 function openCreationWizard(name, description) {
   if (!AppState.apiConfigured) {
     $content.innerHTML = `
-      <h2>项目已创建：《${name}》</h2>
+      <h2>项目已创建：《${escapeHtml(name)}》</h2>
       <div class="card" style="margin-top:16px">
         <h3>AI 生成设定需要配置 API</h3>
         <p style="color:#e67e22;margin:10px 0">尚未配置 API 密钥，无法自动生成世界设定、人物等创作依据。</p>

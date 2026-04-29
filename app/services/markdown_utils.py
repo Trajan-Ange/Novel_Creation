@@ -213,7 +213,6 @@ def extract_key_terms(text: str) -> set[str]:
     """Extract key named entities from text for conflict detection.
     Returns a set of 2+ character Chinese/English proper nouns.
     """
-    import re
     terms = set()
     # Extract from bold markers: **Name**
     for m in re.finditer(r'\*\*(.+?)\*\*', text):

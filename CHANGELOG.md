@@ -8,6 +8,68 @@
 
 ---
 
+## v0.2.4 (2026-04-29)
+
+### 代码审查、清理与 v0.3.0 预备
+
+**缺陷修复：**
+
+- **`write_project_state()` 双重写入**：`write_project_state()` 调用 `save_project_state()`（内部已写磁盘）后自身又再次写入，一次调用产生两次磁盘 I/O。修复：仅委托不二次写入
+- **4 处前端 XSS 高危点**：`project-list.js`（项目名列表渲染、创建向导标题、二创采集 loading）+ `settings-editor.js`（角色名 onclick）用户输入未经转义拼接到 innerHTML。使用 `escapeHtml()` 修复
+- **`load_config` 编辑匹配错误**：首次修复尝试使用错误匹配串，第二次使用更多上下文修复
+
+**死代码删除（5 项）：**
+
+- `app/services/context_builder.py` — `build_full_context()`（零调用者）
+- `app/services/constants.py` — **文件删除**（11/12 常量未使用），`SYNC_DEBUG_RETENTION` 移至 `knowledge_sync.py`
+- `app/api/utils/error_response.py` — 3 未用函数删除（`error_response` / `http_error_detail` / `sse_error`），仅保留 `sanitize_error()`
+- `app/static/js/namespace.js` — **文件删除**（`window.NovelApp` 全项目零引用）
+- `app/core/` — **空目录删除**（仅 pycache 残留）
+
+**代码简化：**
+
+- `file_manager.py` 异步包装器精简：`__getattr__` 动态委托（21 方法 / 85 行 → 12 行），向后兼容
+- `settings.py` 保存分支去重：提取 `_save_setting_by_type()` 辅助函数消除 2 处 28 行重复 if-elif 链
+- `outline.py` 冗余 `from app.skills.outline import run` 删除，使用已有 `outline_skill_run`
+- `sync.py` / `markdown_utils.py` / `llm.py` 内联 import 上移
+
+**v0.3.0 预备：**
+
+- **CSS 自定义属性体系**：`main.css` `:root` 定义 57 个变量（`--color-bg` / `--color-text` / `--color-primary` / `--shadow-sm` 等），`editor.css` / `chat.css` 全部引用。零视觉变化。`.theme-dark` 占位选择器
+- **技能测试骨架**：`conftest.py` 新增 `MockLLMService`（纯内存，零 LLM 依赖）。新建 `test_skill_result.py`（6 测试）+ `test_world_design.py`（5 测试）。总测试 39 → 50
+- **v0.3.0 接口桩**：`file_manager.py` 新增 `export_project_archive()` / `import_project_archive()`，抛出 `NotImplementedError`
+
+**涉及文件：**
+
+- `app/storage/file_manager.py`（双重写入修复 + `__getattr__` + v0.3.0 桩）
+- `app/services/context_builder.py`（删除 `build_full_context`）
+- `app/services/constants.py`（**删除**）
+- `app/api/utils/error_response.py`（删除 3 未用函数）
+- `app/api/settings.py`（`_save_setting_by_type` + sanitize_error）
+- `app/api/sync.py`（import 上移）
+- `app/api/outline.py`（冗余 import 删除）
+- `app/api/chapters.py`（sanitize_error 替换 str(e)）
+- `app/api/projects.py`（sanitize_error 替换 str(e)）
+- `app/services/markdown_utils.py`（import 上移）
+- `app/skills/knowledge_sync.py`（`SYNC_DEBUG_RETENTION` 内联）
+- `app/services/llm.py`（`NOVEL_LLM_API_KEY` env var）
+- `main.py`（CORS + 全局异常处理器）
+- `app/core/`（**删除**）
+- `app/static/js/namespace.js`（**删除**）
+- `app/static/js/components/project-list.js`（XSS 修复）
+- `app/static/js/components/settings-editor.js`（XSS 修复 + 版本历史）
+- `app/static/js/state.js`（导航确认 + pushState + popstate）
+- `app/static/css/main.css`（CSS 变量体系 + `.theme-dark` 占位）
+- `app/static/css/editor.css`（颜色 → CSS 变量）
+- `app/static/css/chat.css`（颜色 → CSS 变量）
+- `app/static/index.html`（移除 namespace.js + 缓存 v=10）
+- `tests/conftest.py`（MockLLMService fixture）
+- `tests/test_skill_result.py`（**新建**，6 测试）
+- `tests/test_world_design.py`（**新建**，5 测试）
+- `ROADMAP.md`、`README.md`、`启动.bat`（版本同步）
+
+---
+
 ## v0.2.3 (2026-04-29)
 
 ### 安全加固与体验提升

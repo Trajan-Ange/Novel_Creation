@@ -88,11 +88,10 @@ async def save_chapter_outline(request: Request, project: str, volume: int, chap
 
 @router.post("/{project}/volume/{volume}/chapter/{chapter}/generate")
 async def generate_chapter_outline(request: Request, project: str, volume: int, chapter: int, body: OutlineGenerateRequest):
-    from app.skills.outline import run
     llm = request.app.state.llm
     fm = request.app.state.fm
     fm.ensure_volume_dir(project, volume)
-    result = await run(llm, fm, project, {
+    result = await outline_skill_run(llm, fm, project, {
         "action": "create_chapter",
         "volume": volume,
         "chapter": chapter,

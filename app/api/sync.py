@@ -1,11 +1,15 @@
 """Knowledge sync and lore extraction API endpoints."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.api.utils.error_response import sanitize_error
 from app.skills.knowledge_sync import run as knowledge_sync_run
 from app.skills.lore_extract import run as lore_extract_run
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -43,8 +47,6 @@ async def trigger_sync(request: Request, project: str, body: SyncRequest):
         if event["type"] == "result":
             result = event["result"]
     if not result.get("success"):
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Sync failed: {result.get('error', 'unknown')}")
         result["error"] = sanitize_error(Exception(str(result.get("error", ""))))
     return result
@@ -62,8 +64,6 @@ async def extract_lore(request: Request, project: str, body: LoreExtractRequest)
         "custom_requirements": body.custom_requirements,
     })
     if not result.get("success"):
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Lore extract failed: {result.get('error', 'unknown')}")
         result["error"] = sanitize_error(Exception(str(result.get("error", ""))))
     return result

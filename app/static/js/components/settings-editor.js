@@ -55,7 +55,7 @@ async function showVersionHistory() {
       </div>`;
     });
     html += '</div>';
-    await Dialog.alert(html);
+    await Dialog.alertHtml(html);
   } catch (e) {
     await Dialog.alert('加载版本历史失败：' + e.message);
   }
@@ -127,8 +127,8 @@ async function renderCharacterSettings(container, project) {
     <div id="char-list">
       ${chars.length === 0 ? '<div class="empty-state"><p>暂无人物设定</p></div>' : ''}
       ${chars.map(c => `
-        <div class="card" style="cursor:pointer" onclick="viewCharacter('${c}')">
-          <h3>${c}</h3>
+        <div class="card" style="cursor:pointer" onclick="viewCharacter('${escapeHtml(c)}')">
+          <h3>${escapeHtml(c)}</h3>
         </div>
       `).join('')}
     </div>

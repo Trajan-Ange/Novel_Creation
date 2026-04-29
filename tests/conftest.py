@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import tempfile
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -39,6 +40,48 @@ def sample_project(fm):
 def setup_app_state(temp_projects_root):
     """Set up app.state.fm for API tests that use TestClient."""
     app.state.fm = FileManager(temp_projects_root)
-    # Ensure app.state.llm is not None (some imports may reference it)
     if not hasattr(app.state, 'llm') or app.state.llm is None:
         app.state.llm = None
+
+
+class MockLLMService:
+    """Simulates LLMService for skill unit tests."""
+
+    def __init__(self, preset_response: str = "Test response",
+                 preset_json: dict | None = None):
+        self.preset_response = preset_response
+        self.preset_json = preset_json
+        self.call_count = 0
+        self.last_call = None
+
+    async def chat_with_context_and_json(
+        self, system_prompt: str = "",
+        context_docs: list | None = None,
+        user_message: str = "",
+        **kwargs
+    ) -> dict:
+        self.call_count += 1
+        self.last_call = {
+            "system_prompt": system_prompt,
+            "context_docs": context_docs or [],
+            "user_message": user_message,
+        }
+        result = {"content": self.preset_response}
+        if self.preset_json is not None:
+            result["json"] = self.preset_json
+        return result
+
+
+@pytest.fixture
+def mock_llm():
+    """Return a MockLLMService with default response."""
+    return MockLLMService()
+
+
+@pytest.fixture
+def mock_llm_with_json():
+    """Return a MockLLMService that also returns JSON."""
+    return MockLLMService(
+        preset_response="## 测试响应\n\n测试内容。",
+        preset_json={"terms": ["灵气", "修炼"], "concepts": ["修仙"]},
+    )

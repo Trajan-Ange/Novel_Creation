@@ -28,6 +28,8 @@ from app.skills.timeline import run as timeline_skill
 from app.skills.world_design import run as world_skill
 from app.skills.relationship import run as rel_skill
 
+SYNC_DEBUG_RETENTION = 5  # Keep last N sync debug file sets
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 1 — Text Analysis Prompt
 # ══════════════════════════════════════════════════════════════════════════════
@@ -208,11 +210,7 @@ def _save_debug(proj_path: str, chapter: int, phase: str, content: str, *, debug
 def _cleanup_old_debug_files(proj_path: str, retention: int = None):
     """Delete debug files older than the `retention` most recent sync batches."""
     if retention is None:
-        try:
-            from app.services.constants import SYNC_DEBUG_RETENTION
-            retention = SYNC_DEBUG_RETENTION
-        except ImportError:
-            retention = 5
+        retention = SYNC_DEBUG_RETENTION
     debug_dir = os.path.join(proj_path, "调试")
     if not os.path.exists(debug_dir):
         return

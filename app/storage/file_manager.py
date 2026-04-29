@@ -192,10 +192,6 @@ class FileManager:
     def write_project_state(self, name: str, state: dict):
         """Alias for save_project_state — conforms to write_* naming convention."""
         self.save_project_state(name, state)
-        state["最近更新时间"] = datetime.now().isoformat()
-        path = os.path.join(self._project_path(name), "项目状态.json")
-        self._write_json(path, state)
-        self._invalidate_cache(name)
 
     # ── Settings read/write ────────────────────────────────────
 
@@ -448,47 +444,77 @@ class FileManager:
         dest = os.path.join(snapshots_root, snapshot_id)
         os.makedirs(dest, exist_ok=True)
 
-        settings_root = self._settings_path(project)
-        for root, dirs, files in os.walk(settings_root):
-            rel = os.path.relpath(root, settings_root)
-            target_dir = os.path.join(dest, rel) if rel != "." else dest
-            os.makedirs(target_dir, exist_ok=True)
-            for f in files:
-                if f.endswith(".md"):
-                    src_path = os.path.join(root, f)
-                    shutil.copy2(src_path, os.path.join(target_dir, f))
+        try:
+            settings_root = os.path.join(self._project_path(project), "创作依据")
+            if not os.path.isdir(settings_root):
+                logger.warning("版本快照跳过 — 创作依据目录不存在: %s", project)
+                os.rmdir(dest)
+                return snapshot_id
 
-        meta = {"reason": reason, "timestamp": datetime.now().isoformat(), "id": snapshot_id}
-        with open(os.path.join(dest, "快照说明.json"), "w", encoding="utf-8") as mf:
-            json.dump(meta, mf, ensure_ascii=False, indent=2)
+            file_count = 0
+            for root, dirs, files in os.walk(settings_root):
+                rel = os.path.relpath(root, settings_root)
+                target_dir = os.path.join(dest, rel) if rel != "." else dest
+                os.makedirs(target_dir, exist_ok=True)
+                for f in files:
+                    if f.endswith(".md"):
+                        src_path = os.path.join(root, f)
+                        shutil.copy2(src_path, os.path.join(target_dir, f))
+                        file_count += 1
 
-        logger.info("版本快照已保存: %s/%s", project, snapshot_id)
-        return snapshot_id
+            if file_count == 0:
+                logger.warning("版本快照跳过 — 无 .md 文件可保存: %s", project)
+                shutil.rmtree(dest)
+                return snapshot_id
+
+            meta = {"reason": reason, "timestamp": datetime.now().isoformat(), "id": snapshot_id,
+                    "file_count": file_count}
+            with open(os.path.join(dest, "快照说明.json"), "w", encoding="utf-8") as mf:
+                json.dump(meta, mf, ensure_ascii=False, indent=2)
+
+            logger.info("版本快照已保存: %s/%s (%d 个文件)", project, snapshot_id, file_count)
+            return snapshot_id
+        except Exception:
+            # Clean up partial snapshot on failure
+            if os.path.isdir(dest):
+                shutil.rmtree(dest, ignore_errors=True)
+            raise
 
     def list_version_snapshots(self, project: str) -> list[dict]:
-        """List all snapshots with metadata, newest first."""
+        """List completed snapshots with metadata, newest first.
+
+        Skips directories without 快照说明.json — these are partial snapshots
+        from interrupted saves (e.g. bug-triggered failures). They are deleted.
+        """
         snapshots_root = self._snapshot_dir(project)
         if not os.path.isdir(snapshots_root):
             return []
         result = []
         for entry in sorted(os.listdir(snapshots_root), reverse=True):
             entry_path = os.path.join(snapshots_root, entry)
-            if os.path.isdir(entry_path):
-                meta_path = os.path.join(entry_path, "快照说明.json")
-                meta = {}
-                if os.path.exists(meta_path):
-                    try:
-                        with open(meta_path, "r", encoding="utf-8") as mf:
-                            meta = json.load(mf)
-                    except json.JSONDecodeError:
-                        pass
-                file_count = len([f for f in os.listdir(entry_path) if f.endswith(".md")])
-                result.append({
-                    "id": entry,
-                    "timestamp": meta.get("timestamp", ""),
-                    "reason": meta.get("reason", ""),
-                    "file_count": file_count,
-                })
+            if not os.path.isdir(entry_path):
+                continue
+            meta_path = os.path.join(entry_path, "快照说明.json")
+            if not os.path.exists(meta_path):
+                # Stale partial snapshot — clean up
+                try:
+                    shutil.rmtree(entry_path)
+                except OSError:
+                    pass
+                continue
+            try:
+                with open(meta_path, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf)
+            except json.JSONDecodeError:
+                shutil.rmtree(entry_path, ignore_errors=True)
+                continue
+            file_count = len([f for f in os.listdir(entry_path) if f.endswith(".md")])
+            result.append({
+                "id": entry,
+                "timestamp": meta.get("timestamp", ""),
+                "reason": meta.get("reason", ""),
+                "file_count": file_count,
+            })
         return result
 
     def restore_version_snapshot(self, project: str, snapshot_id: str) -> bool:
@@ -498,7 +524,7 @@ class FileManager:
         if not os.path.isdir(src):
             raise FileNotFoundError(f"快照不存在: {snapshot_id}")
 
-        settings_root = self._settings_path(project)
+        settings_root = os.path.join(self._project_path(project), "创作依据")
         for root, dirs, files in os.walk(src):
             rel = os.path.relpath(root, src)
             target_dir = os.path.join(settings_root, rel) if rel != "." else settings_root
@@ -514,92 +540,31 @@ class FileManager:
         return True
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Async wrappers — delegate to sync methods via asyncio.to_thread
+    # Async wrappers — dynamic delegation via __getattr__
+    #
+    # Any attribute access prefixed with 'a' (e.g. aread_world_setting) is
+    # dynamically delegated to the corresponding sync method via asyncio.to_thread.
+    # This eliminates 21 boilerplate methods (85 lines → 12 lines).
     # ═══════════════════════════════════════════════════════════════════════════
 
-    async def aread_world_setting(self, project: str):
-        return await asyncio.to_thread(self.read_world_setting, project)
+    # ── v0.3.0 Interface Stubs ──────────────────────
 
-    async def awrite_world_setting(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_world_setting, project, content)
+    def export_project_archive(self, project: str) -> bytes:
+        """v0.3.0: Export entire project as a ZIP archive."""
+        raise NotImplementedError("v0.3.0: export_project_archive")
 
-    async def aread_character(self, project: str, name: str):
-        return await asyncio.to_thread(self.read_character, project, name)
+    def import_project_archive(self, zip_bytes: bytes) -> dict:
+        """v0.3.0: Import a project from a ZIP archive. Returns project info dict."""
+        raise NotImplementedError("v0.3.0: import_project_archive")
 
-    async def awrite_character(self, project: str, name: str, content: str):
-        return await asyncio.to_thread(self.write_character, project, name, content)
+    # ── Async Delegation ─────────────────────────────
 
-    async def alist_characters(self, project: str):
-        return await asyncio.to_thread(self.list_characters, project)
-
-    async def aread_background_timeline(self, project: str):
-        return await asyncio.to_thread(self.read_background_timeline, project)
-
-    async def awrite_background_timeline(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_background_timeline, project, content)
-
-    async def aread_story_timeline(self, project: str):
-        return await asyncio.to_thread(self.read_story_timeline, project)
-
-    async def awrite_story_timeline(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_story_timeline, project, content)
-
-    async def aread_relationship(self, project: str):
-        return await asyncio.to_thread(self.read_relationship, project)
-
-    async def awrite_relationship(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_relationship, project, content)
-
-    async def aread_style_guide(self, project: str):
-        return await asyncio.to_thread(self.read_style_guide, project)
-
-    async def awrite_style_guide(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_style_guide, project, content)
-
-    async def aread_book_outline(self, project: str):
-        return await asyncio.to_thread(self.read_book_outline, project)
-
-    async def awrite_book_outline(self, project: str, content: str):
-        return await asyncio.to_thread(self.write_book_outline, project, content)
-
-    async def aread_volume_outline(self, project: str, volume: int):
-        return await asyncio.to_thread(self.read_volume_outline, project, volume)
-
-    async def awrite_volume_outline(self, project: str, volume: int, content: str):
-        return await asyncio.to_thread(self.write_volume_outline, project, volume, content)
-
-    async def aread_chapter_outline(self, project: str, volume: int, chapter: int):
-        return await asyncio.to_thread(self.read_chapter_outline, project, volume, chapter)
-
-    async def awrite_chapter_outline(self, project: str, volume: int, chapter: int, content: str):
-        return await asyncio.to_thread(self.write_chapter_outline, project, volume, chapter, content)
-
-    async def aread_chapter(self, project: str, volume: int, chapter: int):
-        return await asyncio.to_thread(self.read_chapter, project, volume, chapter)
-
-    async def awrite_chapter(self, project: str, volume: int, chapter: int, content: str):
-        return await asyncio.to_thread(self.write_chapter, project, volume, chapter, content)
-
-    async def alist_chapters(self, project: str, volume: int):
-        return await asyncio.to_thread(self.list_chapters, project, volume)
-
-    async def aread_foreshadowing_list(self, project: str):
-        return await asyncio.to_thread(self.read_foreshadowing_list, project)
-
-    async def aread_project_state(self, project: str):
-        return await asyncio.to_thread(self.read_project_state, project)
-
-    async def awrite_project_state(self, project: str, state: dict):
-        return await asyncio.to_thread(self.write_project_state, project, state)
-
-    async def aget_all_settings(self, project: str):
-        return await asyncio.to_thread(self.get_all_settings, project)
-
-    async def asave_version_snapshot(self, project: str, reason: str = ""):
-        return await asyncio.to_thread(self.save_version_snapshot, project, reason)
-
-    async def alist_version_snapshots(self, project: str):
-        return await asyncio.to_thread(self.list_version_snapshots, project)
-
-    async def arestore_version_snapshot(self, project: str, snapshot_id: str):
-        return await asyncio.to_thread(self.restore_version_snapshot, project, snapshot_id)
+    def __getattr__(self, name: str):
+        if name.startswith('a') and len(name) > 1 and not name.startswith('__'):
+            sync_name = name[1:]
+            sync_method = getattr(self, sync_name, None)
+            if callable(sync_method):
+                async def _async_wrapper(*args, **kwargs):
+                    return await asyncio.to_thread(sync_method, *args, **kwargs)
+                return _async_wrapper
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")

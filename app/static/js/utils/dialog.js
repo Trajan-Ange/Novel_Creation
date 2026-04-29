@@ -45,6 +45,25 @@ const Dialog = {
     });
   },
 
+  /** Show HTML content with an OK button. Only use with trusted (non-user) markup. */
+  alertHtml(html) {
+    return new Promise((resolve) => {
+      this._resolve = resolve;
+      const overlay = this._createOverlay();
+      overlay.innerHTML = `
+        <div class="novel-dialog">
+          <div class="novel-dialog-body">${html}</div>
+          <div class="novel-dialog-footer">
+            <button class="btn btn-primary btn-sm novel-dialog-ok">确定</button>
+          </div>
+        </div>
+      `;
+      overlay.querySelector('.novel-dialog-ok').addEventListener('click', () => this._close());
+      overlay.querySelector('.novel-dialog-ok').focus();
+      this._bindKeyboard(true, false);
+    });
+  },
+
   /** Show a message with OK/Cancel. Returns Promise<boolean>. */
   confirm(message) {
     return new Promise((resolve) => {
