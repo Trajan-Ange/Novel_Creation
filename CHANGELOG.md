@@ -43,6 +43,20 @@
 - `index.html`（缓存版本 v=6 → v=7）
 - `README.md`、`启动.bat`、`ROADMAP.md`（版本号同步）
 
+### v0.2.2 补丁 (2026-04-29)
+
+**Bug 修复：**
+
+- **角色手动创建不可见**：`editCharacterManual()` 未设置 `char-detail` 的 `display:block`，导致编辑器内容不可见。修复：编辑时显示编辑器区域并隐藏角色列表
+- **分卷大纲创建入口缺失**：删除旧版 header 按钮后，大纲树仅展示已有卷，无法创建新卷。修复：大纲树底部新增「＋ 新建卷大纲」入口，通过页面内 Dialog 询问卷号后进入 AI/手动创建
+
+**UX 增强 — 消除浏览器弹窗：**
+
+- 新增 `dialog.js` 页面内 Dialog 系统（`Dialog.alert` / `Dialog.confirm` / `Dialog.prompt`），替代所有 22 处浏览器原生 `prompt()` / `confirm()` / `alert()` 调用
+- 涉及 5 个文件：`app.js`、`chapter-writer.js`、`outline-tree.js`、`project-list.js`、`settings-editor.js`
+- 添加 Dialog CSS（`.novel-dialog-overlay` / `.novel-dialog` 等），带动画效果
+- 缓存版本 v=7 → v=8
+
 ---
 
 ## v0.2.1 (2026-04-29)

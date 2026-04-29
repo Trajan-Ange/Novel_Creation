@@ -87,7 +87,7 @@ async function startChapterWrite() {
     addChatMessage('system', `<div class="content error-message">连接出错：${err.message}</div>`);
   };
 
-  const instruction = prompt('请输入特别要求（可选）：') || '';
+  const instruction = (await Dialog.prompt('请输入特别要求（可选）：')) || '';
 
   await chapterSSE.connect('/api/chapters/generate', {
     body: {

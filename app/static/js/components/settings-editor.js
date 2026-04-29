@@ -99,27 +99,25 @@ async function viewCharacter(name) {
 }
 
 async function deleteCharacter(name) {
-  if (!confirm(`确定删除角色「${name}」？`)) return;
+  const ok = await Dialog.confirm(`确定删除角色「${name}」？`);
+  if (!ok) return;
   await API.settings.deleteCharacter(AppState.currentProject, name);
   renderSettingsEditor();
 }
 
-function createCharacterManual() {
-  const name = prompt('请输入新角色名称：');
+async function createCharacterManual() {
+  const name = await Dialog.prompt('请输入新角色名称：');
   if (!name || !name.trim()) return;
   const trimmedName = name.trim();
-  // Path traversal guard
   if (/[\/\\]/.test(trimmedName) || trimmedName.includes('..')) {
-    alert('角色名包含非法字符，请使用其他名称。');
+    await Dialog.alert('角色名包含非法字符，请使用其他名称。');
     return;
   }
-  // Check duplicates
   const existing = document.querySelectorAll('#char-list .card h3');
   for (const el of existing) {
     if (el.textContent === trimmedName) {
-      if (confirm(`角色「${trimmedName}」已存在，是否编辑？`)) {
-        editCharacterManual(trimmedName);
-      }
+      const ok = await Dialog.confirm(`角色「${trimmedName}」已存在，是否编辑？`);
+      if (ok) editCharacterManual(trimmedName);
       return;
     }
   }
@@ -176,7 +174,7 @@ async function editSetting(type, action) {
 
   // AI generation flow
   const msg = action === 'create' ? '请输入角色创建指令：' : '请输入AI生成/更新指令（可选，留空则AI自动生成）：';
-  const instruction = prompt(msg);
+  const instruction = await Dialog.prompt(msg);
   if (action === 'create' && !instruction) return;
 
   // Show loading state
@@ -212,12 +210,12 @@ async function editSetting(type, action) {
     if (result && result.success) {
       loadSettingsTab(currentSettingsTab);
     } else {
-      alert('操作失败：' + (result?.error || '未知错误，请检查API配置'));
+      await Dialog.alert('操作失败：' + (result?.error || '未知错误，请检查API配置'));
     }
   } catch (err) {
     const loadingEl = document.getElementById('gen-loading');
     if (loadingEl) loadingEl.remove();
-    alert('请求出错：' + (err.message || '网络错误'));
+    await Dialog.alert('请求出错：' + (err.message || '网络错误'));
   }
 }
 
@@ -280,7 +278,7 @@ async function openManualEditor(type) {
     editorDiv.innerHTML = editorHtml;
     editorDiv.style.display = 'block';
   } catch (e) {
-    alert('加载内容失败：' + e.message);
+    await Dialog.alert('加载内容失败：' + e.message);
   }
 }
 
@@ -333,10 +331,10 @@ async function saveManualEdit(type) {
       if (editorDiv) editorDiv.remove();
       loadSettingsTab(currentSettingsTab);
     } else {
-      alert('保存失败：' + (result?.error || '未知错误'));
+      await Dialog.alert('保存失败：' + (result?.error || '未知错误'));
     }
   } catch (e) {
-    alert('保存出错：' + e.message);
+    await Dialog.alert('保存出错：' + e.message);
   }
 }
 
@@ -351,6 +349,8 @@ async function editCharacterManual(name) {
   const project = AppState.currentProject;
   const data = await API.settings.character(project, name);
   const detail = document.getElementById('char-detail');
+  detail.style.display = 'block';
+  document.getElementById('char-list').style.display = 'none';
 
   detail.innerHTML = `
     <div class="settings-toolbar">
@@ -375,9 +375,9 @@ async function saveCharacterManualEdit(name) {
     if (result && result.success) {
       viewCharacter(name);
     } else {
-      alert('保存失败：' + (result?.error || '未知错误'));
+      await Dialog.alert('保存失败：' + (result?.error || '未知错误'));
     }
   } catch (e) {
-    alert('保存出错：' + e.message);
+    await Dialog.alert('保存出错：' + e.message);
   }
 }

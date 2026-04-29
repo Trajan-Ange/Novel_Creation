@@ -44,11 +44,21 @@ async function loadOutlineTree(project) {
       }
       html += '</ul></li>';
     }
+    html += `<li><div class="outline-item" data-otype="new-volume" onclick="createNewVolume()" style="color:#27ae60;font-weight:600">
+      <span class="icon">＋</span> 新建卷大纲
+    </div></li>`;
     html += '</ul>';
     container.innerHTML = html;
   } catch (e) {
     container.innerHTML = '<div class="error-message">加载大纲失败</div>';
   }
+}
+
+async function createNewVolume() {
+  const vStr = await Dialog.prompt('请输入新卷号：');
+  const vol = parseInt(vStr);
+  if (!vol || vol < 1) return;
+  viewOutline('volume', vol);
 }
 
 async function viewOutline(type, vol, ch) {
@@ -115,13 +125,14 @@ async function generateOutlineStream(level, vol, ch) {
     settingType = 'book_outline';
     instruction = '';
   } else if (level === 'volume') {
-    const v = vol || parseInt(prompt('输入卷号：'));
+    const vStr = vol || await Dialog.prompt('请输入卷号：');
+    const v = parseInt(vStr);
     if (!v) return;
     vol = v;
     settingType = 'volume_outline';
     instruction = '';
   } else if (level === 'chapter') {
-    const promptInst = prompt('请输入特别要求（可选）：');
+    const promptInst = await Dialog.prompt('请输入特别要求（可选）：');
     if (promptInst === null) return;
     instruction = promptInst || '';
     settingType = 'chapter_outline';
@@ -274,10 +285,10 @@ async function saveOutlineEdit(level, vol, ch) {
       else if (level === 'volume') viewOutline('volume', vol);
       else viewOutline('chapter', vol, ch);
     } else {
-      alert('保存失败：' + (result?.error || '未知错误'));
+      await Dialog.alert('保存失败：' + (result?.error || '未知错误'));
     }
   } catch (e) {
-    alert('保存出错：' + e.message);
+    await Dialog.alert('保存出错：' + e.message);
   }
 }
 

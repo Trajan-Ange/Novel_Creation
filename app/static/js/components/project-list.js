@@ -22,11 +22,11 @@ async function createProject() {
   const description = document.getElementById('proj-desc').value.trim();
   const type = document.getElementById('proj-type').value;
 
-  if (!name) { alert('请输入项目名称'); return; }
+  if (!name) { await Dialog.alert('请输入项目名称'); return; }
 
   // Create project — pass type and source to backend
   const result = await API.projects.create(name, description, type, type === '二创' ? (document.getElementById('lore-source').value.trim() || '') : '');
-  if (!result.success) { alert('创建失败：' + result.error); return; }
+  if (!result.success) { await Dialog.alert('创建失败：' + result.error); return; }
 
   // If fan-fiction, extract lore first
   if (type === '二创') {
@@ -56,7 +56,7 @@ async function createProject() {
 }
 
 async function deleteProject(name) {
-  if (!confirm(`确定要删除项目「${name}」吗？此操作无法撤销，所有相关文件将被永久删除。`)) return;
+  if (!await Dialog.confirm(`确定要删除项目「${name}」吗？此操作无法撤销，所有相关文件将被永久删除。`)) return;
   try {
     const result = await API.projects.delete(name);
     if (result.success) {
@@ -68,10 +68,10 @@ async function deleteProject(name) {
       updateSidebarProjects();
       navigate('projects');
     } else {
-      alert('删除失败：' + (result.error || '未知错误'));
+      await Dialog.alert('删除失败：' + (result.error || '未知错误'));
     }
   } catch (e) {
-    alert('删除出错：' + e.message);
+    await Dialog.alert('删除出错：' + e.message);
   }
 }
 

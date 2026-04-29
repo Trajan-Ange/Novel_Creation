@@ -38,14 +38,14 @@ document.addEventListener('click', (e) => {
 });
 
 // Context menu action: delete project
-document.getElementById('context-menu').addEventListener('click', (e) => {
+document.getElementById('context-menu').addEventListener('click', async (e) => {
   const item = e.target.closest('.context-menu-item');
   if (!item) return;
   const menu = document.getElementById('context-menu');
   const projectName = menu.dataset.projectName;
   menu.style.display = 'none';
   if (item.dataset.action === 'delete-project' && projectName) {
-    if (confirm(`确定要删除项目「${projectName}」吗？此操作不可撤销。`)) {
+    if (await Dialog.confirm(`确定要删除项目「${projectName}」吗？此操作不可撤销。`)) {
       if (typeof deleteProject === 'function') deleteProject(projectName);
     }
   }
