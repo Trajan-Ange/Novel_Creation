@@ -129,12 +129,38 @@ def build_targeted_context(fm, project: str, setting_type: str, volume: int = 1)
     return "\n".join(parts)
 
 
-def build_chapter_context(fm, project: str, volume: int, chapter: int) -> str:
-    """Build context specific to chapter writing, including volume/book outlines."""
-    parts = [build_full_context(fm, project)]
+def build_chapter_context(fm, project: str, volume: int, chapter: int) -> list[dict]:
+    """Build context docs for chapter writing — truncated settings + outlines + continuity.
 
+    Returns a list of {"title": str, "content": str} dicts, suitable for
+    llm.chat_with_context().  Uses get_truncated_settings() internally.
+    """
+    docs = get_truncated_settings(fm, project)
+
+    # Chapter outline (highest priority — prepend)
     chapter_outline = fm.read_chapter_outline(project, volume, chapter)
     if chapter_outline:
-        parts.insert(0, f"【本章大纲】\n{chapter_outline}\n")
+        docs.insert(0, {"title": "本章大纲（必须严格遵循）", "content": chapter_outline})
 
-    return "\n".join(parts)
+    # Volume outline
+    vol_outline = fm.read_volume_outline(project, volume)
+    if vol_outline:
+        docs.insert(0, {"title": f"第{volume}卷大纲", "content": vol_outline[:2000]})
+
+    # Recent chapters for continuity
+    written_chaps = fm.list_chapters(project, volume)
+    for ch in sorted(written_chaps, reverse=True)[:3]:
+        if ch < chapter:
+            ch_text = fm.read_chapter(project, volume, ch)
+            if ch_text:
+                docs.append({
+                    "title": f"第{ch}章正文（前文参考）",
+                    "content": ch_text[-3000:] if len(ch_text) > 3000 else ch_text,
+                })
+
+    # Foreshadowing status
+    fb_content = fm.read_foreshadowing_list(project)
+    if fb_content:
+        docs.append({"title": "伏笔清单（注意待回收的伏笔）", "content": fb_content[:1500]})
+
+    return docs

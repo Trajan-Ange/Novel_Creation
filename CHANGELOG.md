@@ -8,6 +8,43 @@
 
 ---
 
+## v0.2.2 (2026-04-29)
+
+### 工程质量基础 + UI 功能补全
+
+**UI 功能补全：**
+
+- **角色手动创建按钮**：`settings-editor.js` 新增 "手动创建角色" 按钮（`createCharacterManual()`），含名称验证、路径遍历防护、重复名检测。角色设定现在与世界/时间线/关系/风格保持一致的双按钮模式（AI 对话创建 + 手动创建）
+- **大纲管理冗余按钮清理**：`outline-tree.js` header 删除 "生成全书大纲" 和 "生成卷大纲" 两个旧版入口按钮（与树节点详情视图中的 AI/手动按钮功能重复）。同步删除死代码 `generateOutline()` 函数
+- **卷大纲创建入口统一**：删除 header 按钮后，创建卷大纲唯一路径为：点击树中卷节点 → AI 对话创建 / 手动编辑，与全书大纲创建模式一致
+
+**工程质量：**
+
+- **A2 — 统一技能返回类型**：新增 `app/services/skill_result.py`，`SkillResult(dict)` 子类提供 `success`/`content`/`data`/`error` 属性访问，同时保持 `isinstance(result, dict)` 和 `result["success"]` 向后兼容。9 个 skill 模块全部迁移
+- **A5 — I/O 异步化基础**：`file_manager.py` 新增 28 个 `asyncio.to_thread()` 包装方法（`aread_*` / `awrite_*`），同步调用方不受影响
+- **上下文构建逻辑统一**：删除 `settings.py` 中 50 行重复的 `_get_relevant_context()` 函数，两处调用点替换为 `context_builder.build_targeted_context()`。5 个 skill 模块中 `fm.get_all_settings(project)` 全部替换为 `get_truncated_settings(fm, project)`。重写 `build_chapter_context()` 返回 `list[dict]`，整合最近章节、卷大纲、伏笔清单，`chapter_write.py` 已激活使用
+- **结构化日志**：所有 9 个 skill 模块（`world_design`/`character_design`/`timeline`/`outline`/`chapter_write`/`writing_assist`/`relationship`/`lore_extract`）及 `chapters.py` API 引入 `logging`，`main.py` 添加 `logging.basicConfig()` 基础配置
+- **基础测试覆盖**：新建 `tests/` 目录，39 个测试（25 个 FileManager 单元 + 14 个 API 集成），零 LLM 依赖。`requirements.txt` 新增 `pytest`/`pytest-asyncio`/`httpx`
+
+**涉及文件：**
+
+- `app/services/skill_result.py`（新建）
+- `app/services/context_builder.py`（`build_chapter_context` 重写）
+- `app/skills/` 下 9 个模块（SkillResult + logging + context_builder）
+- `app/storage/file_manager.py`（28 个 async 包装方法 + `import asyncio`）
+- `app/api/settings.py`（删除 `_get_relevant_context` + context_builder 调用）
+- `app/api/chapters.py`（logging 补充）
+- `main.py`（logging 配置）
+- `app/static/js/components/settings-editor.js`（手动创建角色按钮）
+- `app/static/js/components/outline-tree.js`（冗余按钮 + 死代码清理）
+- `app/static/js/components/project-list.js`（SkillResult 兼容：`data`/`result` 双键）
+- `tests/` 目录（4 个文件，39 个测试）
+- `requirements.txt`（pytest / pytest-asyncio / httpx）
+- `index.html`（缓存版本 v=6 → v=7）
+- `README.md`、`启动.bat`、`ROADMAP.md`（版本号同步）
+
+---
+
 ## v0.2.1 (2026-04-29)
 
 ### 上下文优化与健壮性

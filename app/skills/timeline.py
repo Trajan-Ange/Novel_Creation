@@ -4,6 +4,12 @@ Creates and maintains background timeline (pre-story history) and
 story timeline (events after story begins).
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.context_builder import get_truncated_settings
+from app.services.skill_result import SkillResult
+
 SYSTEM_PROMPT = """你是一位时间线管理员，专精于小说叙事的时间结构管理。
 
 你的任务是根据已有设定和章节内容，创建或更新结构化时间线。
@@ -140,7 +146,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     # Only add full settings for create action (needs comprehensive context).
     # For add_event, the instruction already contains the events to add.
     if action == "create":
-        context_docs.extend(fm.get_all_settings(project))
+        context_docs.extend(get_truncated_settings(fm, project))
 
     user_message = instruction
 
@@ -159,11 +165,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         content = result.get("content", "")
         bg_content, story_content = split_timeline_content(content)
 
-        return {
-            "success": True,
-            "background": bg_content,
-            "story": story_content,
-            "json": result.get("json"),
-        }
+        return SkillResult(success=True, background=bg_content, story=story_content, json=result.get("json"))
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("时间线生成失败")
+        return SkillResult(success=False, error=str(e))

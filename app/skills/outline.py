@@ -4,7 +4,11 @@ Generates hierarchical outlines at three levels:
 Book outline -> Volume outline -> Chapter outline.
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
 from app.services.context_builder import get_truncated_settings
+from app.services.skill_result import SkillResult
 
 SYSTEM_PROMPT_BOOK = """你是一位资深小说架构师，专精于长篇网络小说的结构设计。
 
@@ -205,6 +209,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             user_message=user_message,
             max_tokens=8192,
         )
-        return {"success": True, "content": result}
+        return SkillResult(success=True, content=result)
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("大纲生成失败")
+        return SkillResult(success=False, error=str(e))

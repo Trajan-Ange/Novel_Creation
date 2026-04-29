@@ -1,6 +1,14 @@
 """World setting design skill.
 
 Creates and updates structured world setting documents with geography,
+"""
+
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.skill_result import SkillResult
+
+"""
 factions, power systems, rules, and important items.
 """
 
@@ -84,6 +92,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
             context_docs=context_docs,
             user_message=user_message,
         )
-        return {"success": True, "content": result["content"], "json": result.get("json")}
+        return SkillResult(success=True, content=result["content"], data={"json": result.get("json")})
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("世界设定生成失败")
+        return SkillResult(success=False, error=str(e))

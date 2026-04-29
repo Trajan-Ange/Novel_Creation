@@ -85,19 +85,37 @@
 
 ---
 
-## v0.2.2 — 工程质量基础
+## v0.2.2 — 工程质量基础 + UI 功能补全
 
 ### 目标
 
-建立测试、日志、类型系统基础，消除架构债。
+建立测试、日志、类型系统基础，消除架构债；补全 UI 功能缺口。
+
+### UI 功能补全
+- [x] **角色手动创建按钮**：`settings-editor.js` 新增 "手动创建角色" 按钮，与世界观/时间线/关系/风格保持一致的双按钮模式
+- [x] **大纲管理冗余按钮清理**：删除 header 中的 "生成全书大纲" 和 "生成卷大纲" 旧版入口，统一到树节点详情视图
+- [x] **卷大纲创建入口统一**：点击树中卷节点 → AI/手动创建，与全书大纲模式一致
 
 ### 核心工程
+- [x] **A2 — 统一技能返回类型**：新增 `SkillResult(dict)` 子类，9 个 skill 模块全部迁移，保持 dict 向后兼容 + 属性访问
+- [x] **A5 — I/O 异步化基础**：`file_manager.py` 新增 28 个 `asyncio.to_thread()` 包装方法
+- [x] **结构化日志**：所有 9 个 skill 模块 + chapters API 引入 `logging`
+- [x] **基础测试覆盖**：39 个测试（25 个 FileManager 单元 + 14 个 API 集成），零 LLM 依赖
+- [x] **上下文构建逻辑统一**：删除 `settings.py` 50 行重复 `_get_relevant_context()`，6 处替换为 `context_builder`；激活未使用的 `build_chapter_context()`
 
-- [ ] **A2 — 统一技能返回类型**：为非流式技能定义统一的返回 dataclass（`SkillResult`），替代 `dict` / `AsyncIterator` 混用
-- [ ] **A5 — I/O 异步化基础**：所有 `FileManager` 同步方法包装 `run_in_executor()`（需 `aiofiles` 依赖 + 调用点适配）
-- [ ] **结构化日志**：替换 `print` 为 `logging`，按级别输出到文件和控制台
-- [ ] **基础测试覆盖**：pytest + httpx，覆盖核心 API 端点
-- [ ] **上下文构建逻辑统一**：消除 `settings.py` / `chapters.py` / 各 skill 中的重复上下文组装代码，统一使用 `context_builder.py`
+**涉及文件：**
+- `app/services/skill_result.py`（新建）
+- `app/services/context_builder.py`（`build_chapter_context` 重写 + 截断逻辑）
+- `app/skills/` 下 9 个模块（SkillResult + logging + context_builder）
+- `app/storage/file_manager.py`（28 个 async 包装方法）
+- `app/api/settings.py`（删除 `_get_relevant_context`）
+- `app/api/chapters.py`（logging 补充）
+- `app/static/js/components/settings-editor.js`（手动创建角色）
+- `app/static/js/components/outline-tree.js`（冗余按钮 + 死代码清理）
+- `app/static/js/components/project-list.js`（SkillResult 兼容）
+- `tests/` 目录（4 个文件，39 个测试）
+- `requirements.txt`（pytest / pytest-asyncio / httpx）
+- `main.py`（logging 配置）
 
 ---
 
@@ -143,4 +161,4 @@
 
 ---
 
-*最后更新：2026-04-29（v0.2.0 已发布 — LLM 调用 12+→2~4，耗时 60-120s→15-30s）*
+*最后更新：2026-04-29（v0.2.2 已发布 — 工程质量基础 + UI 功能补全）*

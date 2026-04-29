@@ -38,7 +38,7 @@ async function createProject() {
       const loreResult = await API.sync.loreExtract(name, source, [], description);
       if (loreResult.success) {
         // Apply lore to project settings
-        const data = loreResult.result;
+        const data = loreResult.data || loreResult.result;
         if (data.world_setting) {
           await fetch(`/api/settings/${encodeURIComponent(name)}/world/generate`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ project: name, instruction: data.world_setting }) });
         }

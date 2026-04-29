@@ -4,6 +4,12 @@ Generates chapter prose based on chapter outline and all project settings.
 Maintains style consistency and handles foreshadowing integration.
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.context_builder import build_chapter_context
+from app.services.skill_result import SkillResult
+
 SYSTEM_PROMPT = """你是一位专业网络小说作家，擅长创作引人入胜的长篇小说章节。
 
 ## 你的写作准则
@@ -58,34 +64,8 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     instruction = params.get("instruction", "")
     stream = params.get("stream", False)
 
-    # Build comprehensive context
-    context_docs = fm.get_all_settings(project)
-
-    # Add chapter outline (most important)
-    chapter_outline = fm.read_chapter_outline(project, volume, chapter)
-    if chapter_outline:
-        context_docs.insert(0, {"title": "本章大纲（必须严格遵循）", "content": chapter_outline})
-
-    # Add volume outline
-    vol_outline = fm.read_volume_outline(project, volume)
-    if vol_outline:
-        context_docs.insert(0, {"title": f"第{volume}卷大纲", "content": vol_outline})
-
-    # Add recent chapters for continuity
-    written_chaps = fm.list_chapters(project, volume)
-    for ch in sorted(written_chaps, reverse=True)[:3]:
-        if ch < chapter:
-            ch_text = fm.read_chapter(project, volume, ch)
-            if ch_text:
-                context_docs.append({
-                    "title": f"第{ch}章正文（前文，用于保持连贯性）",
-                    "content": ch_text[-3000:] if len(ch_text) > 3000 else ch_text,
-                })
-
-    # Add foreshadowing status
-    fb_content = fm.read_foreshadowing_list(project)
-    if fb_content:
-        context_docs.append({"title": "伏笔清单（注意待回收的伏笔）", "content": fb_content})
+    # Build truncated context via centralized assembler
+    context_docs = build_chapter_context(fm, project, volume, chapter)
 
     user_message = f"请根据本章大纲和所有创作依据，撰写第{volume}卷第{chapter}章的正文。"
 
@@ -110,6 +90,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 user_message=user_message,
                 max_tokens=16384,
             )
-            return {"success": True, "content": result}
+            return SkillResult(success=True, content=result)
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("章节正文生成失败")
+        return SkillResult(success=False, error=str(e))

@@ -7,6 +7,12 @@ Integrates four capabilities:
 4. Pre-write check — generate hints before writing a chapter
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.context_builder import get_truncated_settings
+from app.services.skill_result import SkillResult
+
 SYSTEM_PROMPT_MEMORY = """你是一位小说创作助手，擅长从创作资料中检索和综合信息。
 
 根据用户的问题和提供的参考资料，给出准确、全面的回答。
@@ -84,14 +90,14 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 })
             if not context_docs:
                 # Fallback to all settings
-                context_docs = fm.get_all_settings(project)
+                context_docs = get_truncated_settings(fm, project)
 
             result = await llm.chat_with_context(
                 system_prompt=SYSTEM_PROMPT_MEMORY,
                 context_docs=context_docs,
                 user_message=f"请根据提供的资料回答：{query}",
             )
-            return {"success": True, "content": result, "sources": [r["file"] for r in search_results]}
+            return SkillResult(success=True, content=result, sources=[r["file"] for r in search_results])
 
         elif action == "style_collect":
             instruction = params.get("instruction", "")
@@ -119,7 +125,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 context_docs=context_docs,
                 user_message=user_message,
             )
-            return {"success": True, "content": result}
+            return SkillResult(success=True, content=result)
 
         elif action == "style_check":
             # Compare recent chapter with style guide
@@ -143,15 +149,13 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 context_docs=context_docs,
                 user_message="请检测最新章节的风格一致性。",
             )
-            return {"success": True, "content": result}
+            return SkillResult(success=True, content=result)
 
         elif action == "pre_write_check":
             volume = params.get("volume", 1)
             chapter = params.get("chapter", 1)
 
-            context_docs = fm.get_all_settings(project)
-
-            # Add pending foreshadowing
+            context_docs = get_truncated_settings(fm, project)
             fb_content = fm.read_foreshadowing_list(project)
             if fb_content:
                 context_docs.append({"title": "待回收伏笔", "content": fb_content})
@@ -174,9 +178,10 @@ async def run(llm, fm, project: str, params: dict) -> dict:
                 context_docs=context_docs,
                 user_message=f"即将写作第{volume}卷第{chapter}章，请给出写作前提示。",
             )
-            return {"success": True, "result": {"hints": result}}
+            return SkillResult(success=True, data={"hints": result})
 
         return {"success": False, "error": f"Unknown action: {action}"}
 
     except Exception as e:
+        logger.exception("写作辅助执行失败")
         return {"success": False, "error": str(e)}

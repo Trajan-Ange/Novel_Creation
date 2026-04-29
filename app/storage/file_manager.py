@@ -4,6 +4,7 @@ All file I/O flows through this module. Handles directory creation,
 path validation, markdown read/write, JSON serialization, and keyword search.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -417,3 +418,85 @@ class FileManager:
 
         self._settings_cache[project] = (time.monotonic(), docs)
         return docs
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Async wrappers — delegate to sync methods via asyncio.to_thread
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def aread_world_setting(self, project: str):
+        return await asyncio.to_thread(self.read_world_setting, project)
+
+    async def awrite_world_setting(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_world_setting, project, content)
+
+    async def aread_character(self, project: str, name: str):
+        return await asyncio.to_thread(self.read_character, project, name)
+
+    async def awrite_character(self, project: str, name: str, content: str):
+        return await asyncio.to_thread(self.write_character, project, name, content)
+
+    async def alist_characters(self, project: str):
+        return await asyncio.to_thread(self.list_characters, project)
+
+    async def aread_background_timeline(self, project: str):
+        return await asyncio.to_thread(self.read_background_timeline, project)
+
+    async def awrite_background_timeline(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_background_timeline, project, content)
+
+    async def aread_story_timeline(self, project: str):
+        return await asyncio.to_thread(self.read_story_timeline, project)
+
+    async def awrite_story_timeline(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_story_timeline, project, content)
+
+    async def aread_relationship(self, project: str):
+        return await asyncio.to_thread(self.read_relationship, project)
+
+    async def awrite_relationship(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_relationship, project, content)
+
+    async def aread_style_guide(self, project: str):
+        return await asyncio.to_thread(self.read_style_guide, project)
+
+    async def awrite_style_guide(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_style_guide, project, content)
+
+    async def aread_book_outline(self, project: str):
+        return await asyncio.to_thread(self.read_book_outline, project)
+
+    async def awrite_book_outline(self, project: str, content: str):
+        return await asyncio.to_thread(self.write_book_outline, project, content)
+
+    async def aread_volume_outline(self, project: str, volume: int):
+        return await asyncio.to_thread(self.read_volume_outline, project, volume)
+
+    async def awrite_volume_outline(self, project: str, volume: int, content: str):
+        return await asyncio.to_thread(self.write_volume_outline, project, volume, content)
+
+    async def aread_chapter_outline(self, project: str, volume: int, chapter: int):
+        return await asyncio.to_thread(self.read_chapter_outline, project, volume, chapter)
+
+    async def awrite_chapter_outline(self, project: str, volume: int, chapter: int, content: str):
+        return await asyncio.to_thread(self.write_chapter_outline, project, volume, chapter, content)
+
+    async def aread_chapter(self, project: str, volume: int, chapter: int):
+        return await asyncio.to_thread(self.read_chapter, project, volume, chapter)
+
+    async def awrite_chapter(self, project: str, volume: int, chapter: int, content: str):
+        return await asyncio.to_thread(self.write_chapter, project, volume, chapter, content)
+
+    async def alist_chapters(self, project: str, volume: int):
+        return await asyncio.to_thread(self.list_chapters, project, volume)
+
+    async def aread_foreshadowing_list(self, project: str):
+        return await asyncio.to_thread(self.read_foreshadowing_list, project)
+
+    async def aread_project_state(self, project: str):
+        return await asyncio.to_thread(self.read_project_state, project)
+
+    async def awrite_project_state(self, project: str, state: dict):
+        return await asyncio.to_thread(self.write_project_state, project, state)
+
+    async def aget_all_settings(self, project: str):
+        return await asyncio.to_thread(self.get_all_settings, project)

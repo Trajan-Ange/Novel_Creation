@@ -4,6 +4,12 @@ Creates and updates character profiles with abilities, items,
 experiences, status tracking, and growth trajectory.
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.context_builder import get_truncated_settings
+from app.services.skill_result import SkillResult
+
 SYSTEM_PROMPT = """你是一位资深角色设计师，专精于网络小说的人物塑造。
 
 你的任务是创建或更新结构化的角色设定档案。
@@ -103,7 +109,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         user_message = f"以下章节已生成，请从中提取关于{char_name}的新信息并更新人物设定：\n\n{chapter_summary}"
 
     if action == "create":
-        context_docs = fm.get_all_settings(project)
+        context_docs = get_truncated_settings(fm, project)
         user_message = f"请为以下角色创建完整的设定档案：{instruction}"
 
     try:
@@ -116,11 +122,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         resolved_name = char_name
         if json_data and json_data.get("name"):
             resolved_name = json_data["name"]
-        return {
-            "success": True,
-            "content": result["content"],
-            "char_name": resolved_name,
-            "json": json_data,
-        }
+        return SkillResult(success=True, content=result["content"], char_name=resolved_name, json=json_data)
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("角色设定生成失败")
+        return SkillResult(success=False, error=str(e))

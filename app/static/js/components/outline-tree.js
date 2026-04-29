@@ -7,10 +7,6 @@ async function renderOutlineTree() {
   $content.innerHTML = `
     <div class="section-header">
       <h2>大纲管理</h2>
-      <div>
-        <button class="btn btn-primary btn-sm" onclick="openOutlineChat('book_outline')">生成全书大纲</button>
-        <button class="btn btn-secondary btn-sm" onclick="openOutlineChat('volume_outline')">生成卷大纲</button>
-      </div>
     </div>
     <div style="display:flex;gap:16px">
       <div style="width:280px;flex-shrink:0" id="outline-tree-container"></div>
@@ -103,10 +99,6 @@ async function viewOutline(type, vol, ch) {
   } catch (e) {
     detail.innerHTML = `<div class="error-message">加载失败：${e.message}</div>`;
   }
-}
-
-function generateOutline(level, vol, ch) {
-  generateOutlineStream(level, vol, ch);
 }
 
 async function generateOutlineStream(level, vol, ch) {

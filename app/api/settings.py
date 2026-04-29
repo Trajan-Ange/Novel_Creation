@@ -13,7 +13,7 @@ from app.skills.timeline import run as timeline_skill_run, SYSTEM_PROMPT as TIME
 from app.skills.relationship import run as relationship_skill_run, SYSTEM_PROMPT as RELATIONSHIP_SYSTEM_PROMPT
 from app.skills.writing_assist import run as writing_assist_run, SYSTEM_PROMPT_STYLE
 from app.skills.outline import SYSTEM_PROMPT_BOOK, SYSTEM_PROMPT_VOLUME, SYSTEM_PROMPT_CHAPTER
-from app.services.context_builder import build_truncated_context_parts
+from app.services.context_builder import build_truncated_context_parts, build_targeted_context
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -502,58 +502,6 @@ def _build_interview_prompt(setting_type: str, context_text: str = "") -> str:
     return prompt
 
 
-def _get_relevant_context(fm, project: str, setting_type: str, volume: int = 1) -> str:
-    """Build a context string from existing project settings relevant to the given type."""
-    parts = []
-
-    if setting_type != "world":
-        world = fm.read_world_setting(project)
-        if world:
-            parts.append(f"【世界设定（已完成）】\n{world}\n")
-
-    if setting_type != "character":
-        chars = fm.list_characters(project)
-        if chars:
-            char_texts = []
-            char_limit = 2000 if setting_type == "relationship" else 500
-            for c in chars[:8]:  # limit to avoid overflow
-                content = fm.read_character(project, c)
-                if content:
-                    char_texts.append(f"### {c}\n{content[:char_limit]}")
-            if char_texts:
-                parts.append("【人物设定（已完成）】\n" + "\n\n".join(char_texts) + "\n")
-
-    if setting_type not in ("timeline", "world"):
-        bg = fm.read_background_timeline(project)
-        if bg:
-            parts.append(f"【背景时间线（已完成）】\n{bg[:2000]}\n")
-        story = fm.read_story_timeline(project)
-        if story:
-            parts.append(f"【故事时间线（已完成）】\n{story[:2000]}\n")
-
-    if setting_type != "relationship":
-        rel = fm.read_relationship(project)
-        if rel:
-            parts.append(f"【人物关系（已完成）】\n{rel[:2000]}\n")
-
-    if setting_type != "style":
-        style = fm.read_style_guide(project)
-        if style:
-            parts.append(f"【风格指南（已完成）】\n{style[:1500]}\n")
-
-    # Outline context for volume/chapter outline creation
-    if setting_type in ("volume_outline", "chapter_outline"):
-        book = fm.read_book_outline(project)
-        if book:
-            parts.append(f"【全书大纲（已完成）】\n{book[:3000]}\n")
-    if setting_type == "chapter_outline":
-        vol = fm.read_volume_outline(project, volume)
-        if vol:
-            parts.append(f"【第{volume}卷大纲（已完成）】\n{vol[:3000]}\n")
-
-    return "\n".join(parts)
-
-
 def _extract_char_name(instruction: str) -> str:
     """Extract character name from instruction text like '创建角色：张三' or '新增角色 张三'."""
     m = re.search(r'(?:创建|新增|添加|生成)(?:角色[：:]\s*)?(.+?)(?:[，,。]|$)', instruction)
@@ -650,7 +598,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
             type_name = SETTING_TYPE_NAMES.get(st, st)
 
             if body.action == "start":
-                context_text = _get_relevant_context(fm, project, st, body.volume)
+                context_text = build_targeted_context(fm, project, st, body.volume)
                 interview_prompt = _build_interview_prompt(st, context_text)
                 messages = [
                     {"role": "system", "content": interview_prompt},
@@ -683,7 +631,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 })
 
             elif body.action == "chat":
-                context_text = _get_relevant_context(fm, project, st, body.volume)
+                context_text = build_targeted_context(fm, project, st, body.volume)
                 interview_prompt = _build_interview_prompt(st, context_text)
                 messages = [{"role": "system", "content": interview_prompt}]
                 for h in (body.history or []):

@@ -67,6 +67,7 @@ async function renderCharacterSettings(container, project) {
   container.innerHTML = `
     <div class="settings-toolbar">
       <button class="btn btn-primary btn-sm" onclick="openSettingsChat('character')">AI 对话创建角色</button>
+      <button class="btn btn-secondary btn-sm" onclick="createCharacterManual()">手动创建角色</button>
     </div>
     <div id="char-list">
       ${chars.length === 0 ? '<div class="empty-state"><p>暂无人物设定</p></div>' : ''}
@@ -101,6 +102,28 @@ async function deleteCharacter(name) {
   if (!confirm(`确定删除角色「${name}」？`)) return;
   await API.settings.deleteCharacter(AppState.currentProject, name);
   renderSettingsEditor();
+}
+
+function createCharacterManual() {
+  const name = prompt('请输入新角色名称：');
+  if (!name || !name.trim()) return;
+  const trimmedName = name.trim();
+  // Path traversal guard
+  if (/[\/\\]/.test(trimmedName) || trimmedName.includes('..')) {
+    alert('角色名包含非法字符，请使用其他名称。');
+    return;
+  }
+  // Check duplicates
+  const existing = document.querySelectorAll('#char-list .card h3');
+  for (const el of existing) {
+    if (el.textContent === trimmedName) {
+      if (confirm(`角色「${trimmedName}」已存在，是否编辑？`)) {
+        editCharacterManual(trimmedName);
+      }
+      return;
+    }
+  }
+  editCharacterManual(trimmedName);
 }
 
 async function renderTimelineSettings(container, project) {

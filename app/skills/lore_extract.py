@@ -2,7 +2,14 @@
 
 Supports fan-fiction / derivative works by extracting structured setting
 information from existing IPs (games, anime, novels, movies).
+"""
 
+import logging
+logger = logging.getLogger(__name__)
+
+from app.services.skill_result import SkillResult
+
+"""
 Uses the LLM's training knowledge as the primary source. Web search
 integration can be added as an enhancement.
 """
@@ -124,7 +131,7 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     custom_requirements = params.get("custom_requirements", "")
 
     if not source_name:
-        return {"success": False, "error": "请提供源作品名称"}
+        return SkillResult(success=False, error="请提供源作品名称")
 
     # Build the extraction instruction
     scope_desc = "全部设定"
@@ -174,19 +181,17 @@ async def run(llm, fm, project: str, params: dict) -> dict:
         # Split content into sections for different settings files
         sections = _split_extracted_content(content, source_name)
 
-        return {
-            "success": True,
-            "result": {
-                "world_setting": sections.get("world", ""),
-                "character_settings": sections.get("characters", []),
-                "timeline": sections.get("timeline", ""),
-                "relationships": sections.get("relationships", ""),
-                "full_content": content,
-                "json": json_data,
-            },
-        }
+        return SkillResult(success=True, data={
+            "world_setting": sections.get("world", ""),
+            "character_settings": sections.get("characters", []),
+            "timeline": sections.get("timeline", ""),
+            "relationships": sections.get("relationships", ""),
+            "full_content": content,
+            "json": json_data,
+        })
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("世界观提取失败")
+        return SkillResult(success=False, error=str(e))
 
 
 def _split_extracted_content(content: str, source_name: str) -> dict:

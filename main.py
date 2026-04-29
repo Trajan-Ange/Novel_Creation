@@ -1,5 +1,6 @@
 """Novel Creation & Management System — FastAPI entry point."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,11 @@ PROJECTS_ROOT = os.path.join(BASE_DIR, "projects")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
     config = load_config(CONFIG_PATH)
     app.state.llm = LLMService(config)
     app.state.fm = FileManager(PROJECTS_ROOT)

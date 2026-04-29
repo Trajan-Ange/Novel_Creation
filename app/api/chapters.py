@@ -1,6 +1,7 @@
 """Chapter writing API endpoints with SSE streaming."""
 
 import logging
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -133,6 +134,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 try:
                     fm.write_chapter_outline(project, volume, chapter, outline_content)
                 except Exception as e:
+                    logger.exception("大纲保存失败")
                     yield send("error", {"message": f"大纲保存失败：{e}"})
                     return
                 yield send("outline", {"markdown": outline_content})
@@ -163,6 +165,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
                 try:
                     fm.write_chapter(project, volume, chapter, full_text)
                 except Exception as e:
+                    logger.exception("章节保存失败")
                     yield send("error", {"message": f"章节保存失败：{e}"})
                     return
                 yield send("text_complete", {"full_text": full_text})
@@ -207,6 +210,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             try:
                 fm.write_chapter_outline(project, volume, chapter, outline_content)
             except Exception as e:
+                logger.exception("大纲保存失败")
                 yield send("error", {"message": f"大纲保存失败：{e}"})
                 return
             yield send("outline", {"markdown": outline_content})
@@ -263,6 +267,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             try:
                 fm.write_chapter(project, volume, chapter, full_text)
             except Exception as e:
+                logger.exception("章节保存失败")
                 yield send("error", {"message": f"章节保存失败：{e}"})
                 return
             yield send("text_complete", {"full_text": full_text})
@@ -300,6 +305,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
             yield send("done", {"message": "章节生成完成"})
 
         except Exception as e:
+            logger.exception("章节生成流水线异常")
             yield send("error", {"message": str(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -336,6 +342,7 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                     try:
                         fm.write_chapter_outline(project, volume, chapter, outline_content)
                     except Exception as e:
+                        logger.exception("大纲保存失败")
                         yield send("error", {"message": f"大纲保存失败：{e}"})
                         return
                     yield send("outline", {"markdown": outline_content, "adjusted": True})
@@ -389,6 +396,7 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                 try:
                     fm.write_chapter(project, volume, chapter, full_text)
                 except Exception as e:
+                    logger.exception("章节保存失败")
                     yield send("error", {"message": f"章节保存失败：{e}"})
                     return
                 yield send("text_complete", {"full_text": full_text})
@@ -429,6 +437,7 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
                 yield send("error", {"message": f"Unknown action: {body.action}"})
 
         except Exception as e:
+            logger.exception("写作反馈流水线异常")
             yield send("error", {"message": str(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
