@@ -8,6 +8,46 @@
 
 ---
 
+## v0.2.3 (2026-04-29)
+
+### 安全加固与体验提升
+
+**安全加固：**
+
+- **API Key 环境变量支持**：`load_config()` 检查 `NOVEL_LLM_API_KEY` 环境变量，优先级高于 `config.json` 文件。GET `/api/config` 返回 `api_key_source` 字段标识 Key 来源（`env` / `file` / `none`）
+- **项目名校验增强**：`_validate_name()` 增加长度限制（≤50 字符）、纯空白拒绝、前后空格拒绝、Windows 保留名拦截（CON / PRN / AUX / NUL / COM1-9 / LPT1-9）
+- **错误信息脱敏**：新增 `sanitize_error()` 函数（移除绝对路径、堆栈跟踪）；`main.py` 新增全局 `@app.exception_handler(Exception)` 统一拦截未处理异常；`chapters.py`、`settings.py`、`projects.py`、`sync.py` 的 `str(e)` 全部替换为 `sanitize_error(e)`
+- **CORS 限制为本地地址**：`allow_origins=["*"]` 替换为 `["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:3000", "http://localhost:3000"]`，支持 `NOVEL_CORS_ORIGINS` 环境变量扩展
+
+**体验增强：**
+
+- **版本快照**：`file_manager.py` 新增 `save_version_snapshot()` / `list_version_snapshots()` / `restore_version_snapshot()` 方法及异步包装器。知识同步 Phase 3 前自动保存快照。新增 `GET /api/settings/{project}/snapshots` 和 `POST /api/settings/{project}/snapshots/restore` API。前端新增 "版本历史" 按钮，Dialog 展示快照列表并支持恢复
+- **冲突检测**：`markdown_utils.py` 新增 `extract_key_terms()` / `find_conflicts()` 函数。知识同步 Phase 2 后自动提取关键术语与已有设定对比，Phase 4 更新报告展示「⚠️ 潜在冲突」小节
+- **导航确认**：`state.js` 新增 `hasActiveSSE()` 检查四个 SSE 客户端活跃状态。`navigate()` 中若存在活跃连接则 `Dialog.confirm` 提示用户确认。切换项目时同样检查。`beforeunload` 监听器防止意外关闭页面
+- **浏览器历史支持**：`navigate()` / `setProject()` 调用 `history.pushState` 写入 `#/项目名/页面` 格式 hash URL。`popstate` 监听器支持前进/后退。`restoreFromHash()` 在页面初始化时从 URL hash 恢复导航状态。缓存版本 v=8 → v=9
+
+**涉及文件：**
+
+- `app/services/llm.py`（env var 支持）
+- `app/storage/file_manager.py`（名称校验增强 + 版本快照方法 + async 包装器）
+- `app/api/utils/error_response.py`（`sanitize_error` 新增）
+- `main.py`（CORS 限制 + 全局异常处理器）
+- `app/api/config.py`（`api_key_source` 字段）
+- `app/api/settings.py`（SSE 错误脱敏 + 快照 API + HTTPException import）
+- `app/api/chapters.py`（SSE 错误脱敏）
+- `app/api/projects.py`（错误脱敏）
+- `app/api/sync.py`（错误脱敏）
+- `app/skills/knowledge_sync.py`（快照调用 + 冲突检测 + 报告增强）
+- `app/services/markdown_utils.py`（`extract_key_terms` + `find_conflicts`）
+- `app/static/js/state.js`（导航确认 + pushState + popstate + beforeunload + restoreFromHash）
+- `app/static/js/app.js`（init 从 hash 恢复）
+- `app/static/js/components/settings-editor.js`（版本历史 Dialog UI）
+- `app/static/index.html`（缓存版本 v=8 → v=9）
+- `tests/test_file_manager.py`（新增 4 条名称校验测试）
+- `README.md`、`启动.bat`、`ROADMAP.md`（版本号同步）
+
+---
+
 ## v0.2.2 (2026-04-29)
 
 ### 工程质量基础 + UI 功能补全

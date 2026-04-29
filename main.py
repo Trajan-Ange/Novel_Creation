@@ -4,12 +4,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.utils.error_response import sanitize_error
 from app.services.llm import LLMService, load_config
 from app.storage.file_manager import FileManager
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -32,9 +36,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="小说创作管理系统", lifespan=lifespan)
 
+_default_origins = [
+    "http://127.0.0.1:8000", "http://localhost:8000",
+    "http://127.0.0.1:3000", "http://localhost:3000",
+]
+_cors_env = os.environ.get("NOVEL_CORS_ORIGINS")
+if _cors_env:
+    _default_origins.extend(o.strip() for o in _cors_env.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_default_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,6 +55,17 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch unhandled exceptions and return sanitized error responses."""
+    logger.error(f"Unhandled error: {type(exc).__name__}: {exc}", exc_info=True)
+    sanitized = sanitize_error(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "error": sanitized, "code": "INTERNAL_ERROR"},
+    )
 
 
 # Register API routers

@@ -306,7 +306,7 @@ class LLMService:
 
 # Config file management
 def load_config(config_path: str) -> dict:
-    """Load LLM config from JSON file. Returns defaults if file missing."""
+    """Load LLM config from JSON file. Env var NOVEL_LLM_API_KEY takes precedence."""
     defaults = {
         "api_key": "",
         "base_url": "https://api.openai.com/v1",
@@ -320,6 +320,12 @@ def load_config(config_path: str) -> dict:
             defaults.update(saved)
     except (FileNotFoundError, json.JSONDecodeError):
         pass
+    env_key = os.environ.get("NOVEL_LLM_API_KEY")
+    if env_key:
+        defaults["api_key"] = env_key
+        defaults["api_key_source"] = "env"
+    else:
+        defaults["api_key_source"] = "file" if defaults.get("api_key") else "none"
     return defaults
 
 

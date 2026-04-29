@@ -67,5 +67,7 @@ document.getElementById('btn-config').addEventListener('click', () => {
     const cfg = await API.config.get();
     AppState.apiConfigured = cfg.is_configured;
   } catch (e) { /* ignore */ }
-  navigate('projects');
+  if (!restoreFromHash()) {
+    navigate('projects', true);
+  }
 })();

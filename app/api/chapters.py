@@ -7,6 +7,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.api.utils.error_response import sanitize_error
+
 from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
 from app.skills.outline import run as outline_run
 from app.skills.chapter_write import run as chapter_run
@@ -306,7 +308,7 @@ async def generate_chapter(request: Request, body: ChapterWriteRequest):
 
         except Exception as e:
             logger.exception("章节生成流水线异常")
-            yield send("error", {"message": str(e)})
+            yield send("error", {"message": sanitize_error(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -438,7 +440,7 @@ async def chapter_feedback(request: Request, body: ChapterFeedbackRequest):
 
         except Exception as e:
             logger.exception("写作反馈流水线异常")
-            yield send("error", {"message": str(e)})
+            yield send("error", {"message": sanitize_error(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

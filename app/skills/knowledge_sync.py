@@ -822,6 +822,16 @@ def _generate_report(volume: int, chapter: int, chapter_len: int,
                       "> 2. LLM 提取结果为空\n"
                       f"> 详情请查看调试文件：`项目目录/调试/同步_*_第{chapter}章.txt`\n")
 
+    # Report conflicts if any
+    conflict_list = phase_results.get("_conflicts", [])
+    if conflict_list:
+        parts.append("## ⚠️ 潜在冲突\n")
+        for c in conflict_list[:20]:
+            parts.append(f"- {c}")
+        if len(conflict_list) > 20:
+            parts.append(f"\n... 共 {len(conflict_list)} 处冲突，此处仅显示前 20 条")
+        parts.append("")
+
     parts.append(f"## 更新统计\n已修改模块：{', '.join(sorted(changed_cats)) if changed_cats else '无'}")
     parts.append(f"提取步骤：文字分析 → 人物/事件/世界/关系/伏笔 分类提取 → 分步更新")
 
@@ -934,8 +944,42 @@ async def run(llm, fm, project: str, params: dict):
                    "message": f"{_DOMAIN_LABELS[name]}提取完成 "
                               f"({_time.monotonic() - t0:.1f}s)"}
 
+        # ── Conflict detection between new and existing content ──
+        from app.services.markdown_utils import extract_key_terms, find_conflicts
+        conflicts = []
+        for domain_key, settings_key in [
+            ("characters", "角色"),
+            ("events", "时间线"),
+            ("world", "世界"),
+            ("relationships", "关系"),
+        ]:
+            extracted_text = json.dumps(extraction_data.get(domain_key, {}), ensure_ascii=False)
+            new_terms = extract_key_terms(extracted_text)
+            if not new_terms:
+                continue
+            # Build existing settings text for this domain
+            existing_parts = []
+            for doc in settings_cache:
+                if settings_key in doc.get("title", ""):
+                    existing_parts.append(doc.get("content", ""))
+            existing_text = "\n".join(existing_parts)
+            if not existing_text:
+                continue
+            domain_conflicts = find_conflicts(new_terms, existing_text)
+            if domain_conflicts:
+                for c in domain_conflicts:
+                    conflicts.append(f"[{settings_key}设定] {c}")
+        if conflicts:
+            yield {"type": "progress", "phase": "conflict",
+                   "message": f"检测到 {len(conflicts)} 处潜在冲突"}
+
+        # Save version snapshot before making any file changes
+        fm.save_version_snapshot(project, f"知识同步自动保存 — 第{volume}卷第{chapter}章")
+
         # ── Phase 3: File Updates (sequential — each may write to disk) ──
         phase_results = {}
+        if conflicts:
+            phase_results["_conflicts"] = conflicts
 
         char_data = extraction_data["characters"]
         char_lines, char_changed = await _process_characters(llm, fm, project, chapter, char_data, settings_cache)

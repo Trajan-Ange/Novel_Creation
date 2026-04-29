@@ -33,6 +33,14 @@ class TestProjectCRUD:
             fm.create_project("", "原创", "")
         with pytest.raises(ValueError):
             fm.create_project("name/with/slash", "原创", "")
+        with pytest.raises(ValueError):
+            fm.create_project("   ", "原创", "")
+        with pytest.raises(ValueError):
+            fm.create_project(" CON", "原创", "")
+        with pytest.raises(ValueError):
+            fm.create_project(" 前后空格 ", "原创", "")
+        with pytest.raises(ValueError):
+            fm.create_project("A" * 51, "原创", "")
 
     def test_project_state_read_write(self, fm, sample_project):
         state = fm.read_project_state(sample_project)

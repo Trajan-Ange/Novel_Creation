@@ -3,6 +3,8 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.api.utils.error_response import sanitize_error
+
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
@@ -25,9 +27,9 @@ async def create_project(request: Request, body: CreateProjectRequest):
         state = fm.create_project(body.name, body.type, body.source)
         return {"success": True, "project": state}
     except FileExistsError as e:
-        raise HTTPException(status_code=409, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=409, detail={"success": False, "error": sanitize_error(e)})
     except ValueError as e:
-        raise HTTPException(status_code=422, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=422, detail={"success": False, "error": sanitize_error(e)})
 
 
 @router.delete("/{name}")

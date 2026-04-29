@@ -3,7 +3,10 @@ let currentSettingsTab = 'world';
 
 async function renderSettingsEditor() {
   $content.innerHTML = `
-    <div class="section-header"><h2>创作依据管理</h2></div>
+    <div class="section-header">
+      <h2>创作依据管理</h2>
+      <button class="btn btn-secondary btn-sm" onclick="showVersionHistory()">版本历史</button>
+    </div>
     <div class="settings-tabs">
       <div class="settings-tab" data-stab="world">世界设定</div>
       <div class="settings-tab" data-stab="characters">人物设定</div>
@@ -26,6 +29,58 @@ async function renderSettingsEditor() {
   // Activate first tab
   document.querySelector(`.settings-tab[data-stab="${currentSettingsTab}"]`).classList.add('active');
   loadSettingsTab(currentSettingsTab);
+}
+
+async function showVersionHistory() {
+  const project = AppState.currentProject;
+  try {
+    const resp = await fetch(`/api/settings/${encodeURIComponent(project)}/snapshots`);
+    const data = await resp.json();
+    if (!data.success) {
+      await Dialog.alert('加载版本历史失败：' + data.error);
+      return;
+    }
+    const snapshots = data.snapshots;
+    if (!snapshots || snapshots.length === 0) {
+      await Dialog.alert('暂无版本历史记录。每次知识同步后会自动保存版本快照。');
+      return;
+    }
+    let html = '<div class="snapshot-list">';
+    snapshots.forEach(s => {
+      html += `<div class="snapshot-item">
+        <span>${s.id}</span>
+        <span>${s.reason || '—'}</span>
+        <span>${s.file_count} 个文件</span>
+        <button class="btn btn-sm btn-warning" onclick="restoreSnapshot('${s.id}')">恢复此版本</button>
+      </div>`;
+    });
+    html += '</div>';
+    await Dialog.alert(html);
+  } catch (e) {
+    await Dialog.alert('加载版本历史失败：' + e.message);
+  }
+}
+
+async function restoreSnapshot(snapshotId) {
+  const project = AppState.currentProject;
+  const confirmed = await Dialog.confirm(`确定要恢复到版本 ${snapshotId} 吗？当前设定将被覆盖。`);
+  if (!confirmed) return;
+  try {
+    const resp = await fetch(`/api/settings/${encodeURIComponent(project)}/snapshots/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_id: snapshotId }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      await Dialog.alert('版本快照恢复成功！');
+      loadSettingsTab(currentSettingsTab);
+    } else {
+      await Dialog.alert('恢复失败：' + data.error);
+    }
+  } catch (e) {
+    await Dialog.alert('恢复失败：' + e.message);
+  }
 }
 
 async function loadSettingsTab(tab) {

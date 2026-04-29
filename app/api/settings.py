@@ -2,9 +2,11 @@
 
 import re
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from app.api.utils.error_response import sanitize_error
 
 from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
 from app.skills.world_design import run as world_skill_run, SYSTEM_PROMPT as WORLD_SYSTEM_PROMPT
@@ -351,7 +353,7 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
             yield send("complete", {"content": full_text, "setting_type": st})
 
         except Exception as e:
-            yield send("error", {"message": str(e)})
+            yield send("error", {"message": sanitize_error(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -752,6 +754,33 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 yield send("error", {"message": f"未知的 action：{body.action}"})
 
         except Exception as e:
-            yield send("error", {"message": str(e)})
+            yield send("error", {"message": sanitize_error(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ── Version snapshot endpoints ──────────────────────────────────
+
+@router.get("/{project}/snapshots")
+async def list_snapshots(request: Request, project: str):
+    """List version snapshots for a project."""
+    fm = request.app.state.fm
+    snapshots = fm.list_version_snapshots(project)
+    return {"success": True, "snapshots": snapshots}
+
+
+class RestoreSnapshotRequest(BaseModel):
+    snapshot_id: str
+
+
+@router.post("/{project}/snapshots/restore")
+async def restore_snapshot(request: Request, project: str, body: RestoreSnapshotRequest):
+    """Restore settings from a version snapshot."""
+    fm = request.app.state.fm
+    try:
+        fm.restore_version_snapshot(project, body.snapshot_id)
+        return {"success": True, "message": "版本快照已恢复"}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail={"success": False, "error": sanitize_error(e)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": sanitize_error(e)})

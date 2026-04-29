@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from datetime import datetime
 from typing import Optional
@@ -37,10 +38,26 @@ class FileManager:
         """Public accessor for the project directory absolute path."""
         return self._project_path(name)
 
+    _WINDOWS_RESERVED = {
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+
     def _validate_name(self, name: str):
-        """Project names: alphanumeric, underscores, Chinese characters, spaces."""
+        """Project names: alphanumeric, underscores, Chinese characters, spaces.
+        Length ≤ 50, not whitespace-only, no Windows reserved names or trailing/leading spaces."""
         if not name or not re.match(r'^[\w一-鿿\s\-]+$', name):
-            raise ValueError(f"Invalid project name: {name}")
+            raise ValueError(f"无效的项目名称: {name}")
+        if len(name) > 50:
+            raise ValueError("项目名称过长（最多 50 个字符）")
+        if name.strip() == "":
+            raise ValueError("项目名称不能为纯空白字符")
+        if name.strip() != name:
+            raise ValueError("项目名称开头或结尾不能有空格")
+        stem = name.split(".")[0].upper()
+        if stem in self._WINDOWS_RESERVED:
+            raise ValueError(f"'{name}' 是 Windows 系统保留名，不可使用")
 
     def _validate_char_name(self, name: str):
         """Character names: must not contain path separators or special filesystem chars."""
@@ -419,6 +436,83 @@ class FileManager:
         self._settings_cache[project] = (time.monotonic(), docs)
         return docs
 
+    # ── Version snapshot management ─────────────────────────────
+
+    def _snapshot_dir(self, project: str) -> str:
+        return os.path.join(self._project_path(project), "版本历史")
+
+    def save_version_snapshot(self, project: str, reason: str = "") -> str:
+        """Copy all settings files to 版本历史/v{timestamp}/. Returns snapshot id."""
+        snapshots_root = self._snapshot_dir(project)
+        snapshot_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = os.path.join(snapshots_root, snapshot_id)
+        os.makedirs(dest, exist_ok=True)
+
+        settings_root = self._settings_path(project)
+        for root, dirs, files in os.walk(settings_root):
+            rel = os.path.relpath(root, settings_root)
+            target_dir = os.path.join(dest, rel) if rel != "." else dest
+            os.makedirs(target_dir, exist_ok=True)
+            for f in files:
+                if f.endswith(".md"):
+                    src_path = os.path.join(root, f)
+                    shutil.copy2(src_path, os.path.join(target_dir, f))
+
+        meta = {"reason": reason, "timestamp": datetime.now().isoformat(), "id": snapshot_id}
+        with open(os.path.join(dest, "快照说明.json"), "w", encoding="utf-8") as mf:
+            json.dump(meta, mf, ensure_ascii=False, indent=2)
+
+        logger.info("版本快照已保存: %s/%s", project, snapshot_id)
+        return snapshot_id
+
+    def list_version_snapshots(self, project: str) -> list[dict]:
+        """List all snapshots with metadata, newest first."""
+        snapshots_root = self._snapshot_dir(project)
+        if not os.path.isdir(snapshots_root):
+            return []
+        result = []
+        for entry in sorted(os.listdir(snapshots_root), reverse=True):
+            entry_path = os.path.join(snapshots_root, entry)
+            if os.path.isdir(entry_path):
+                meta_path = os.path.join(entry_path, "快照说明.json")
+                meta = {}
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as mf:
+                            meta = json.load(mf)
+                    except json.JSONDecodeError:
+                        pass
+                file_count = len([f for f in os.listdir(entry_path) if f.endswith(".md")])
+                result.append({
+                    "id": entry,
+                    "timestamp": meta.get("timestamp", ""),
+                    "reason": meta.get("reason", ""),
+                    "file_count": file_count,
+                })
+        return result
+
+    def restore_version_snapshot(self, project: str, snapshot_id: str) -> bool:
+        """Restore settings files from a snapshot. Returns True on success."""
+        snapshots_root = self._snapshot_dir(project)
+        src = os.path.join(snapshots_root, snapshot_id)
+        if not os.path.isdir(src):
+            raise FileNotFoundError(f"快照不存在: {snapshot_id}")
+
+        settings_root = self._settings_path(project)
+        for root, dirs, files in os.walk(src):
+            rel = os.path.relpath(root, src)
+            target_dir = os.path.join(settings_root, rel) if rel != "." else settings_root
+            for f in files:
+                if f.endswith(".md"):
+                    src_path = os.path.join(root, f)
+                    dst_path = os.path.join(target_dir, f)
+                    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                    shutil.copy2(src_path, dst_path)
+
+        self._settings_cache.pop(project, None)
+        logger.info("版本快照已恢复: %s/%s", project, snapshot_id)
+        return True
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Async wrappers — delegate to sync methods via asyncio.to_thread
     # ═══════════════════════════════════════════════════════════════════════════
@@ -500,3 +594,12 @@ class FileManager:
 
     async def aget_all_settings(self, project: str):
         return await asyncio.to_thread(self.get_all_settings, project)
+
+    async def asave_version_snapshot(self, project: str, reason: str = ""):
+        return await asyncio.to_thread(self.save_version_snapshot, project, reason)
+
+    async def alist_version_snapshots(self, project: str):
+        return await asyncio.to_thread(self.list_version_snapshots, project)
+
+    async def arestore_version_snapshot(self, project: str, snapshot_id: str):
+        return await asyncio.to_thread(self.restore_version_snapshot, project, snapshot_id)

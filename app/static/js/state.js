@@ -6,27 +6,71 @@ const AppState = {
 };
 const $content = document.getElementById('content');
 
-function navigate(section) {
-  // Disconnect active SSE clients before destroying DOM
-  if (typeof chapterSSE !== 'undefined' && chapterSSE) { chapterSSE.disconnect(); chapterSSE = null; }
-  if (typeof outlineStreamingClient !== 'undefined' && outlineStreamingClient) { outlineStreamingClient.disconnect(); outlineStreamingClient = null; }
-  if (typeof settingsChatClient !== 'undefined' && settingsChatClient) { settingsChatClient.disconnect(); settingsChatClient = null; }
-  if (typeof wizardSSEClient !== 'undefined' && wizardSSEClient) { wizardSSEClient.disconnect(); wizardSSEClient = null; }
+const _SSE_VARS = ['chapterSSE', 'outlineStreamingClient', 'settingsChatClient', 'wizardSSEClient'];
+
+function hasActiveSSE() {
+  return _SSE_VARS.some(name => {
+    try {
+      const client = window[name];
+      if (!client) return false;
+      if (typeof client._abortController === 'undefined') return false;
+      return client._abortController && !client._abortController.signal.aborted;
+    } catch (e) { return false; }
+  });
+}
+
+function disconnectAllSSE() {
+  _SSE_VARS.forEach(name => {
+    try {
+      const client = window[name];
+      if (client) { client.disconnect(); window[name] = null; }
+    } catch (e) { /* ignore */ }
+  });
+}
+
+async function navigate(section, skipSseCheck) {
+  if (!skipSseCheck && hasActiveSSE()) {
+    const proceed = await Dialog.confirm('当前有正在进行的 AI 生成任务，确定要离开吗？');
+    if (!proceed) return;
+  }
+
+  disconnectAllSSE();
 
   AppState.currentSection = section;
   document.querySelectorAll('#sidebar li[data-section]').forEach(el => {
     el.classList.toggle('active', el.dataset.section === section);
   });
-  // Keep the selected project highlighted when navigating within a project
   if (section !== 'projects') {
     document.querySelectorAll('#nav-projects li[data-project]').forEach(el => {
       el.classList.toggle('active', el.dataset.project === AppState.currentProject);
     });
   }
+
+  // Update browser history
+  const url = AppState.currentProject
+    ? `#/${encodeURIComponent(AppState.currentProject)}/${section}`
+    : `#/${section}`;
+  const state = { project: AppState.currentProject, section };
+  if (skipSseCheck) {
+    history.replaceState(state, '', url);
+  } else {
+    history.pushState(state, '', url);
+  }
+
   renderContent(section);
 }
 
 function setProject(name) {
+  if (name && AppState.currentProject && name !== AppState.currentProject && hasActiveSSE()) {
+    Dialog.confirm('当前有正在进行的 AI 生成任务，确定要切换项目吗？').then(proceed => {
+      if (proceed) doSetProject(name);
+    });
+    return;
+  }
+  doSetProject(name);
+}
+
+function doSetProject(name) {
   AppState.currentProject = name;
   const indicator = document.getElementById('project-indicator');
   if (indicator) indicator.textContent = name ? '当前项目：' + name : '未选择项目';
@@ -35,7 +79,6 @@ function setProject(name) {
   const nav = document.getElementById('sidebar-project-nav');
   if (nav) nav.style.display = name ? 'block' : 'none';
 
-  // Highlight selected project in sidebar
   document.querySelectorAll('#nav-projects li[data-project]').forEach(el => {
     el.classList.toggle('active', el.dataset.project === name);
   });
@@ -65,3 +108,47 @@ function renderContent(section) {
     default: $content.innerHTML = '<div class="empty-state"><h3>未知页面</h3></div>';
   }
 }
+
+// ── Browser history support ──────────────────────────────────
+
+function restoreFromHash() {
+  const hash = window.location.hash.slice(1); // Remove leading #
+  if (!hash) return false;
+  const parts = hash.split('/').filter(Boolean);
+  if (parts.length === 0) return false;
+
+  // Check if first part is a project name or a section name
+  const sections = ['projects', 'dashboard', 'settings', 'outline', 'writing', 'chapters', 'foreshadowing', 'query'];
+  if (sections.includes(parts[0])) {
+    navigate(parts[0], true);
+    return true;
+  }
+
+  // First part might be a project name
+  const project = decodeURIComponent(parts[0]);
+  const section = parts[1] || 'dashboard';
+  if (sections.includes(section)) {
+    doSetProject(project);
+    navigate(section, true);
+    return true;
+  }
+
+  navigate('projects', true);
+  return true;
+}
+
+window.addEventListener('popstate', (event) => {
+  if (event.state && event.state.section) {
+    if (event.state.project) {
+      doSetProject(event.state.project);
+    }
+    navigate(event.state.section, true);
+  }
+});
+
+window.addEventListener('beforeunload', (event) => {
+  if (hasActiveSSE()) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});

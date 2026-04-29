@@ -207,3 +207,36 @@ def build_relationship_change_rows(changes: list[dict], chapter: int) -> list[st
         trigger = ch.get("trigger_event", "-")
         rows.append(f"| 第{chapter}章 | {char_a}, {char_b} | {change} | 第{chapter}章 |")
     return rows
+
+
+def extract_key_terms(text: str) -> set[str]:
+    """Extract key named entities from text for conflict detection.
+    Returns a set of 2+ character Chinese/English proper nouns.
+    """
+    import re
+    terms = set()
+    # Extract from bold markers: **Name**
+    for m in re.finditer(r'\*\*(.+?)\*\*', text):
+        term = m.group(1).strip()
+        if 2 <= len(term) <= 30:
+            terms.add(term)
+    # Extract key-value pairs: name/character/place: Value
+    for m in re.finditer(r'(?:姓名|名称|角色名|character|name|地点|place|事件)[：:]\s*([^\n]{2,30})', text, re.IGNORECASE):
+        term = m.group(1).strip()
+        if term:
+            terms.add(term)
+    # Filter out generic terms
+    _generic = {"未知", "无", "暂无", "待定", "N/A", "none", "unknown", "——", "--"}
+    return {t for t in terms if t not in _generic}
+
+
+def find_conflicts(new_terms: set[str], existing_text: str) -> list[str]:
+    """Check if any new terms overlap with existing settings content.
+    Returns a list of conflict descriptions."""
+    conflicts = []
+    for term in new_terms:
+        if len(term) < 2:
+            continue
+        if term in existing_text:
+            conflicts.append(f"'{term}' 在已有设定中已存在，新内容可能与之冲突")
+    return conflicts
