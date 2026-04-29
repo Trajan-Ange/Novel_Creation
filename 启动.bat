@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo ========================================
-echo     Novel Creation System v0.1.4
+echo     Novel Creation System v0.2.0
 echo ========================================
 echo(
 

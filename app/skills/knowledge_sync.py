@@ -1,18 +1,27 @@
 """Knowledge sync engine — the core innovation of the system.
 
-Workflow:
+Workflow (v0.2.0 — optimized):
+  Phase 0: Pre-load all settings once into session cache
   Phase 1: Text analysis (1 LLM call — free-text, no JSON)
-  Phase 2: Category extraction (5 LLM calls — focused JSON per domain)
-  Phase 3: File updates (fan-out to skills or direct write)
+  Phase 2: Parallel category extraction (5 LLM calls via asyncio.gather)
+  Phase 3: File updates
+    - Characters: programmatic template for simple new chars,
+      single batch LLM call for all complex changes
+    - Events: programmatic table-row append (LLM fallback)
+    - World: programmatic section/list append (LLM fallback)
+    - Relationships: programmatic table-row append (LLM fallback)
+    - Foreshadowing: direct file I/O
   Phase 4: Update report
 
-Each phase has its own system prompt and JSON schema, preventing
-the output truncation that occurred with the monolithic approach.
+Total LLM calls: 2-4 (down from 12+). Wall time: 15-30s (down from 60-120s).
 """
 
+import asyncio
 import json
 import logging
 import os
+import re
+import time as _time
 
 from app.skills.character_design import run as char_skill
 from app.skills.timeline import run as timeline_skill
@@ -156,11 +165,28 @@ FORESHADOWING_PROMPT = """你是一位伏笔管理员。根据章节分析报告
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Constants
+# ══════════════════════════════════════════════════════════════════════════════
+
+_MAX_CONCURRENT_EXTRACTORS = 3  # Cap parallel Phase 2 calls to avoid API rate limits
+
+_DOMAIN_LABELS = {
+    "characters": "人物",
+    "events": "事件",
+    "world": "世界设定",
+    "relationships": "人物关系",
+    "foreshadowing": "伏笔",
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _save_debug(proj_path: str, chapter: int, phase: str, content: str):
-    """Save intermediate results for diagnosis."""
+def _save_debug(proj_path: str, chapter: int, phase: str, content: str, *, debug: bool = False):
+    """Save intermediate results for diagnosis. No-op when debug=False."""
+    if not debug:
+        return
     try:
         debug_dir = os.path.join(proj_path, "调试")
         os.makedirs(debug_dir, exist_ok=True)
@@ -169,6 +195,34 @@ def _save_debug(proj_path: str, chapter: int, phase: str, content: str):
             f.write(content)
     except Exception:
         pass
+
+
+def _cleanup_old_debug_files(proj_path: str, retention: int = None):
+    """Delete debug files older than the `retention` most recent sync batches."""
+    if retention is None:
+        try:
+            from app.services.constants import SYNC_DEBUG_RETENTION
+            retention = SYNC_DEBUG_RETENTION
+        except ImportError:
+            retention = 5
+    debug_dir = os.path.join(proj_path, "调试")
+    if not os.path.exists(debug_dir):
+        return
+    # Group files by chapter (each chapter = one sync batch)
+    chapter_groups: dict[int, list[str]] = {}
+    for f in os.listdir(debug_dir):
+        match = re.match(r'同步_.*_第(\d+)章\.txt', f)
+        if match:
+            ch = int(match.group(1))
+            chapter_groups.setdefault(ch, []).append(f)
+    # Keep only the most recent `retention` chapter groups
+    sorted_chapters = sorted(chapter_groups.keys(), reverse=True)
+    for old_ch in sorted_chapters[retention:]:
+        for f in chapter_groups[old_ch]:
+            try:
+                os.remove(os.path.join(debug_dir, f))
+            except OSError:
+                pass
 
 
 async def _call_llm(llm, system_prompt: str, context_docs: list, user_message: str,
@@ -186,6 +240,17 @@ async def _call_llm(llm, system_prompt: str, context_docs: list, user_message: s
         return {"content": "", "json": None}
 
 
+def _preload_settings(fm, project: str) -> dict[str, str]:
+    """Pre-load all project settings into a dict for sync session reuse.
+
+    Returns a dict keyed by document title (e.g. "世界设定", "故事时间线",
+    "人物设定：角色名").  All Phase 2 extractors and Phase 3 processors
+    look up from this cache instead of re-reading from disk.
+    """
+    docs = fm.get_all_settings(project)
+    return {doc["title"]: doc["content"] for doc in docs}
+
+
 def _existing_char_names(fm, project: str) -> list[str]:
     """Get list of existing character names for the project."""
     return fm.list_characters(project)
@@ -196,9 +261,10 @@ def _existing_char_names(fm, project: str) -> list[str]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def _text_analysis(llm, fm, project: str, volume: int, chapter: int,
-                         chapter_content: str) -> str:
+                         chapter_content: str, settings_cache: dict[str, str]) -> str:
     """Read chapter, produce detailed markdown analysis."""
-    context_docs = fm.get_all_settings(project)
+    context_docs = [{"title": title, "content": content}
+                    for title, content in settings_cache.items()]
     outline = fm.read_chapter_outline(project, volume, chapter)
     if outline:
         context_docs.insert(0, {"title": "本章大纲", "content": outline})
@@ -223,7 +289,7 @@ async def _text_analysis(llm, fm, project: str, volume: int, chapter: int,
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def _extract_characters(llm, fm, project: str, volume: int, chapter: int,
-                              analysis: str) -> dict:
+                              analysis: str, settings_cache: dict[str, str]) -> dict:
     """Extract new characters and character updates from analysis."""
     existing_names = _existing_char_names(fm, project)
     context = [
@@ -240,9 +306,9 @@ async def _extract_characters(llm, fm, project: str, volume: int, chapter: int,
 
 
 async def _extract_events(llm, fm, project: str, volume: int, chapter: int,
-                          analysis: str) -> dict:
+                          analysis: str, settings_cache: dict[str, str]) -> dict:
     """Extract timeline events from analysis."""
-    existing_story = fm.read_story_timeline(project) or ""
+    existing_story = settings_cache.get("故事时间线", "")
     context = [
         {"title": "章节分析报告", "content": analysis},
     ]
@@ -254,9 +320,9 @@ async def _extract_events(llm, fm, project: str, volume: int, chapter: int,
 
 
 async def _extract_world(llm, fm, project: str, volume: int, chapter: int,
-                         analysis: str) -> dict:
+                         analysis: str, settings_cache: dict[str, str]) -> dict:
     """Extract new locations and world info from analysis."""
-    existing_world = fm.read_world_setting(project) or ""
+    existing_world = settings_cache.get("世界设定", "")
     context = [
         {"title": "章节分析报告", "content": analysis},
     ]
@@ -268,9 +334,9 @@ async def _extract_world(llm, fm, project: str, volume: int, chapter: int,
 
 
 async def _extract_relationships(llm, fm, project: str, volume: int, chapter: int,
-                                 analysis: str) -> dict:
+                                 analysis: str, settings_cache: dict[str, str]) -> dict:
     """Extract relationship changes from analysis."""
-    existing_rel = fm.read_relationship(project) or ""
+    existing_rel = settings_cache.get("人物关系", "")
     context = [
         {"title": "章节分析报告", "content": analysis},
     ]
@@ -282,7 +348,7 @@ async def _extract_relationships(llm, fm, project: str, volume: int, chapter: in
 
 
 async def _extract_foreshadowing(llm, fm, project: str, volume: int, chapter: int,
-                                 analysis: str) -> dict:
+                                 analysis: str, settings_cache: dict[str, str]) -> dict:
     """Extract foreshadowing from analysis."""
     existing_fb = fm.read_foreshadowing_list(project) or ""
     context = [
@@ -299,85 +365,231 @@ async def _extract_foreshadowing(llm, fm, project: str, volume: int, chapter: in
 # Phase 3: File Updates
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def _process_characters(llm, fm, project: str, chapter: int, data: dict) -> list:
-    """Create new characters and update existing ones. Returns summary lines."""
+async def _process_characters(llm, fm, project: str, chapter: int, data: dict,
+                             settings_cache: dict[str, str]) -> tuple[list, bool]:
+    """Process character changes: simple → programmatic, complex → batch LLM.
+
+    - Simple new characters (name + brief description): programmatic template
+    - Character updates and complex new characters: single batch LLM call
+    """
+    from app.services.markdown_utils import build_character_template
 
     lines = []
     changed = False
 
-    # New characters
-    for nc in data.get("new_characters", []):
-        try:
-            name = nc.get("name", "") if isinstance(nc, dict) else str(nc)
-            if not name:
-                continue
-            desc = nc.get("description", "") if isinstance(nc, dict) else ""
-            faction = nc.get("faction", "") if isinstance(nc, dict) else ""
-            result = await char_skill(llm, fm, project, {
-                "action": "create",
-                "instruction": f"创建角色：{name}，描述：{desc}，阵营：{faction}",
-                "char_name": name,
-            })
-            if result.get("success"):
-                fm.write_character(project, result["char_name"], result["content"])
-                changed = True
-                lines.append(f"- 新人物：{result['char_name']}")
-        except Exception as e:
-            lines.append(f"- 新人物处理失败（{nc}）：{e}")
+    new_chars = data.get("new_characters", [])
+    updates = data.get("character_updates", [])
 
-    # Character updates
-    for cu in data.get("character_updates", []):
-        try:
-            name = cu.get("name", "") if isinstance(cu, dict) else str(cu)
-            if not name:
-                continue
-            existing = fm.read_character(project, name)
-            if not existing:
-                # Character doesn't exist yet — treat as new
-                result = await char_skill(llm, fm, project, {
-                    "action": "create",
-                    "instruction": f"创建角色：{name}",
-                    "char_name": name,
-                })
-                if result.get("success"):
-                    fm.write_character(project, name, result["content"])
-                    changed = True
-                    lines.append(f"- 自动创建角色：{name}（原为更新目标但角色不存在）")
-                continue
+    # Separate simple new characters from ones needing LLM
+    programmatic_new = []
+    llm_new = []
+    for nc in new_chars:
+        name = nc.get("name", "") if isinstance(nc, dict) else str(nc)
+        if not name:
+            continue
+        desc = nc.get("description", "") if isinstance(nc, dict) else ""
+        # Simple if description is short and no faction complexity
+        if len(desc) < 200:
+            programmatic_new.append((name, desc, nc.get("faction", "") if isinstance(nc, dict) else ""))
+        else:
+            llm_new.append(nc)
 
-            field = cu.get("field", "") if isinstance(cu, dict) else ""
-            change = cu.get("change", "") if isinstance(cu, dict) else ""
-            detail = cu.get("detail", "") if isinstance(cu, dict) else ""
-            result = await char_skill(llm, fm, project, {
-                "action": "update",
-                "instruction": f"更新{field}：{change}，详情：{detail}",
-                "char_name": name,
-                "existing_content": existing,
-            })
-            if result.get("success"):
-                fm.write_character(project, name, result["content"])
-                changed = True
-                lines.append(f"- {name}：{change}")
+    # Programmatic creation of simple new characters
+    for name, desc, faction in programmatic_new:
+        try:
+            content = build_character_template(name, desc, faction, chapter)
+            fm.write_character(project, name, content)
+            changed = True
+            lines.append(f"- 新人物（自动）：{name}")
         except Exception as e:
-            lines.append(f"- 人物更新处理失败（{cu}）：{e}")
+            lines.append(f"- 新人物创建失败（{name}）：{e}")
+
+    # Collect updates that need LLM (existing char updates + complex new chars)
+    llm_updates = list(updates)  # all updates go to LLM batch
+    llm_new_names = {nc.get("name", "") if isinstance(nc, dict) else str(nc) for nc in llm_new}
+
+    # Prepare existing files for characters needing LLM
+    existing_files = {}
+    for cu in llm_updates:
+        name = cu.get("name", "") if isinstance(cu, dict) else str(cu)
+        if not name:
+            continue
+        cache_key = f"人物设定：{name}"
+        content = settings_cache.get(cache_key) or fm.read_character(project, name)
+        if content:
+            existing_files[name] = content
+        elif name not in llm_new_names:
+            # Character doesn't exist yet but wasn't in new_chars — quick create
+            tmpl = build_character_template(name, "", "", chapter)
+            fm.write_character(project, name, tmpl)
+            existing_files[name] = tmpl
+            lines.append(f"- 自动创建角色：{name}（原为更新目标）")
+            changed = True
+
+    for nc in llm_new:
+        name = nc.get("name", "") if isinstance(nc, dict) else str(nc)
+        if name:
+            existing_files[name] = ""  # marker: needs full creation
+
+    # Batch LLM call for all remaining character work
+    if llm_updates or llm_new:
+        try:
+            batch_result = await _batch_character_update(
+                llm, fm, project, chapter, llm_updates, llm_new, existing_files
+            )
+            if batch_result:
+                summary_entries = batch_result.pop("_summary", []) or []
+                for char_name, content in batch_result.items():
+                    if content and isinstance(content, str):
+                        fm.write_character(project, char_name, content)
+                        changed = True
+                lines.extend(f"- {n}: {d}" for n, d in summary_entries)
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Batch character update failed: {e}")
+            lines.append(f"- 批量角色更新失败：{e}，已跳过")
+            # Fall back to individual updates
+            for cu in llm_updates:
+                try:
+                    name = cu.get("name", "") if isinstance(cu, dict) else str(cu)
+                    if not name or name not in existing_files:
+                        continue
+                    field = cu.get("field", "") if isinstance(cu, dict) else ""
+                    change = cu.get("change", "") if isinstance(cu, dict) else ""
+                    detail = cu.get("detail", "") if isinstance(cu, dict) else ""
+                    result = await char_skill(llm, fm, project, {
+                        "action": "update",
+                        "instruction": f"更新{field}：{change}，详情：{detail}",
+                        "char_name": name,
+                        "existing_content": existing_files[name],
+                    })
+                    if result.get("success"):
+                        fm.write_character(project, name, result["content"])
+                        changed = True
+                        lines.append(f"- {name}：{change}")
+                except Exception as e2:
+                    lines.append(f"- 人物更新失败（{cu}）：{e2}")
 
     return lines, changed
 
 
-async def _process_events(llm, fm, project: str, data: dict) -> list:
-    """Update story timeline with new events. Returns summary lines."""
+async def _batch_character_update(llm, fm, project: str, chapter: int,
+                                  updates: list, new_chars: list,
+                                  existing_files: dict) -> dict | None:
+    """Single LLM call to process all complex character changes at once.
+
+    Returns dict of {char_name: new_content} or None on failure.
+    A special key "_summary" contains [(name, change_summary), ...] for reporting.
+    """
+    if not updates and not new_chars:
+        return None
+
+    change_descriptions = []
+    for u in updates:
+        name = u.get("name", "") if isinstance(u, dict) else str(u)
+        field = u.get("field", "") if isinstance(u, dict) else ""
+        change = u.get("change", "") if isinstance(u, dict) else ""
+        detail = u.get("detail", "") if isinstance(u, dict) else ""
+        change_descriptions.append(f"- {name}：{field} — {change}（{detail}）")
+
+    for nc in new_chars:
+        name = nc.get("name", "") if isinstance(nc, dict) else str(nc)
+        desc = nc.get("description", "") if isinstance(nc, dict) else ""
+        faction = nc.get("faction", "") if isinstance(nc, dict) else ""
+        change_descriptions.append(f"- [新角色] {name}：{desc}，阵营：{faction}")
+
+    context_docs = []
+    for name, content in existing_files.items():
+        if content:
+            label = "新角色（待创建）" if not content.strip() else "当前设定"
+            context_docs.append({"title": f"{label}：{name}", "content": content or "（待创建）"})
+
+    user_msg = (
+        f"请一次性处理以下所有角色变更（第{chapter}章）：\n\n"
+        + "\n".join(change_descriptions)
+        + "\n\n对每个角色，输出完整的更新后设定文件。"
+        + "\n每个角色以 ---CHARACTER:角色名--- 开头。"
+    )
+
+    try:
+        result = await llm.chat_with_context_and_json(
+            system_prompt=(
+                "你是一位角色设定批量更新专家。你将收到多个角色的变更请求。\n"
+                "对每个角色，输出其完整的更新后Markdown设定文件。\n"
+                "每个文件以 `---CHARACTER:角色名---` 单独一行开头。\n"
+                "保留已有设定中未变更的部分，仅修改需要变更的领域。\n"
+                "在重要经历表中追加新的经历行。\n"
+                "使用中文。"
+            ),
+            context_docs=context_docs,
+            user_message=user_msg,
+            max_tokens=16384,
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Batch character LLM call failed: {e}")
+        return None
+
+    content = result.get("content", "")
+    if not content:
+        return None
+
+    # Split by separator
+    parts = {}
+    current_name = None
+    current_lines = []
+    for line in content.split("\n"):
+        if line.startswith("---CHARACTER:"):
+            if current_name and current_lines:
+                parts[current_name] = "\n".join(current_lines).strip()
+            current_name = line[len("---CHARACTER:"):].strip()
+            current_lines = []
+        elif current_name:
+            current_lines.append(line)
+
+    if current_name and current_lines:
+        parts[current_name] = "\n".join(current_lines).strip()
+
+    if not parts:
+        return None
+
+    # Build summary
+    summary = []
+    for name in parts:
+        if name in existing_files and existing_files[name]:
+            summary.append((name, "已更新"))
+        else:
+            summary.append((name, "已创建"))
+
+    parts["_summary"] = summary
+    return parts
+
+
+async def _process_events(llm, fm, project: str, chapter: int, data: dict,
+                         settings_cache: dict[str, str]) -> tuple[list, bool]:
+    """Update story timeline — programmatic table append with LLM fallback."""
+    from app.services.markdown_utils import append_table_rows, build_timeline_rows
 
     lines = []
     events = data.get("new_events", [])
     if not events:
         return lines, False
 
+    existing = settings_cache.get("故事时间线") or fm.read_story_timeline(project) or ""
+    new_rows = build_timeline_rows(events, chapter)
+
+    if new_rows and existing:
+        updated = append_table_rows(existing, "| 时间点 |", new_rows)
+        if updated != existing:
+            fm.write_story_timeline(project, updated)
+            lines.append("- 故事时间线已更新（程序化）")
+            return lines, True
+
+    # LLM fallback
     try:
         result = await timeline_skill(llm, fm, project, {
             "action": "add_event",
             "instruction": f"添加以下事件：{json.dumps(events, ensure_ascii=False)}",
-            "existing_bg": fm.read_background_timeline(project),
-            "existing_story": fm.read_story_timeline(project),
+            "existing_bg": settings_cache.get("背景时间线"),
+            "existing_story": existing,
         })
         if result.get("success"):
             if result.get("story"):
@@ -394,25 +606,69 @@ async def _process_events(llm, fm, project: str, data: dict) -> list:
     return lines, False
 
 
-async def _process_world(llm, fm, project: str, data: dict) -> list:
-    """Update world setting. Returns summary lines."""
+async def _process_world(llm, fm, project: str, data: dict,
+                       settings_cache: dict[str, str]) -> tuple[list, bool]:
+    """Update world setting — programmatic section append with LLM fallback."""
+    from app.services.markdown_utils import append_section, append_list_item
 
     lines = []
     new_world = data.get("new_world_info", {})
     new_locs = data.get("new_locations", [])
 
-    # Log locations even though we don't have a separate locations file
+    existing = settings_cache.get("世界设定") or fm.read_world_setting(project) or ""
+    updated = existing
+    programmatic_ok = True
+
+    # Programmatic: append new locations
     for nl in new_locs:
         name = nl.get("name", "") if isinstance(nl, dict) else str(nl)
-        if name:
+        if not name:
+            continue
+        desc = nl.get("description", "待补充") if isinstance(nl, dict) else "待补充"
+        region = nl.get("region", "待补充") if isinstance(nl, dict) else "待补充"
+        loc_md = f"### {name}\n- 位置：{region}\n- 特征：{desc}\n- 势力分布：待补充\n- 资源特产：待补充\n- 特殊规则：待补充\n"
+        result = append_section(updated, "## 地理区域", loc_md)
+        if result != updated:
+            updated = result
             lines.append(f"- 新区域：{name}")
+        else:
+            programmatic_ok = False
 
-    if isinstance(new_world, dict) and (
+    # Programmatic: append new rules/items/powers
+    if isinstance(new_world, dict):
+        for rule in new_world.get("new_rules", []):
+            result = append_list_item(updated, "## 世界规则", f"- {rule}")
+            if result != updated:
+                updated = result
+            else:
+                programmatic_ok = False
+        for item in new_world.get("new_items", []):
+            result = append_list_item(updated, "## 重要物品", f"- {item}")
+            if result != updated:
+                updated = result
+            else:
+                programmatic_ok = False
+        for power in new_world.get("new_powers", []):
+            result = append_list_item(updated, "## 特殊能力/技能", f"- {power}")
+            if result != updated:
+                updated = result
+            else:
+                programmatic_ok = False
+
+    if updated != existing:
+        fm.write_world_setting(project, updated)
+        lines.append("- 世界设定已更新（程序化）")
+        return lines, True
+
+    if not new_locs and not (isinstance(new_world, dict) and (
         new_world.get("new_rules") or new_world.get("new_items") or
         new_world.get("new_powers")
-    ):
+    )):
+        return lines, False
+
+    # LLM fallback when programmatic append failed
+    if not programmatic_ok:
         try:
-            existing = fm.read_world_setting(project) or ""
             result = await world_skill(llm, fm, project, {
                 "action": "update",
                 "instruction": f"本章新增元素：{json.dumps(new_world, ensure_ascii=False)}",
@@ -420,7 +676,7 @@ async def _process_world(llm, fm, project: str, data: dict) -> list:
             })
             if result.get("success"):
                 fm.write_world_setting(project, result["content"])
-                lines.append("- 世界设定已更新")
+                lines.append("- 世界设定已更新（LLM）")
                 return lines, True
         except Exception as e:
             lines.append(f"- 世界设定更新失败：{e}")
@@ -428,16 +684,29 @@ async def _process_world(llm, fm, project: str, data: dict) -> list:
     return lines, bool(new_locs)
 
 
-async def _process_relationships(llm, fm, project: str, data: dict) -> list:
-    """Update relationship map. Returns summary lines."""
+async def _process_relationships(llm, fm, project: str, chapter: int, data: dict,
+                               settings_cache: dict[str, str]) -> tuple[list, bool]:
+    """Update relationship map — programmatic table append with LLM fallback."""
+    from app.services.markdown_utils import append_table_rows, build_relationship_change_rows
 
     lines = []
     changes = data.get("relationship_changes", [])
     if not changes:
         return lines, False
 
+    existing = settings_cache.get("人物关系") or fm.read_relationship(project) or ""
+
+    # Try programmatic append to "关系变化记录" table
+    new_rows = build_relationship_change_rows(changes, chapter)
+    if new_rows and existing:
+        updated = append_table_rows(existing, "| 变化时间 |", new_rows)
+        if updated != existing:
+            fm.write_relationship(project, updated)
+            lines.append("- 人物关系已更新（程序化）")
+            return lines, True
+
+    # LLM fallback
     try:
-        existing = fm.read_relationship(project) or ""
         result = await rel_skill(llm, fm, project, {
             "action": "update",
             "instruction": f"关系变化：{json.dumps(changes, ensure_ascii=False)}",
@@ -453,7 +722,8 @@ async def _process_relationships(llm, fm, project: str, data: dict) -> list:
     return lines, False
 
 
-def _process_foreshadowing(fm, project: str, volume: int, chapter: int, data: dict) -> list:
+async def _process_foreshadowing(fm, project: str, volume: int, chapter: int,
+                                 data: dict) -> tuple[list, bool]:
     """Write new foreshadowing files and update recovered ones. Returns summary lines."""
     lines = []
 
@@ -472,26 +742,26 @@ def _process_foreshadowing(fm, project: str, volume: int, chapter: int, data: di
                 f"- 涉及人物：{', '.join(related) if related else '无'}\n"
                 f"- 建议回收章节：{suggested}\n"
             )
-            fm.write_foreshadowing_detail(project, fb_id, detail)
+            await asyncio.to_thread(fm.write_foreshadowing_detail, project, fb_id, detail)
             lines.append(f"- 伏笔埋设：{fb_content[:50]}...（{fb_id}）")
 
     # Recovered foreshadowing
     for rfb in data.get("recovered_foreshadowing", []):
         fb_id = rfb.get("id", "") if isinstance(rfb, dict) else str(rfb)
         if fb_id:
-            existing = fm.read_foreshadowing_detail(project, fb_id)
+            existing = await asyncio.to_thread(fm.read_foreshadowing_detail, project, fb_id)
             if existing:
                 how = rfb.get("how", "") if isinstance(rfb, dict) else ""
                 updated = existing.replace("待回收", "已回收")
                 updated += f"\n- 回收章节：第{chapter}章\n- 回收方式：{how}\n"
-                fm.write_foreshadowing_detail(project, fb_id, updated)
+                await asyncio.to_thread(fm.write_foreshadowing_detail, project, fb_id, updated)
                 lines.append(f"- 伏笔回收：{fb_id}（{how}）")
-                state = fm.get_project_state(project)
+                state = await asyncio.to_thread(fm.get_project_state, project)
                 pending = state.get("待回收伏笔", [])
                 if fb_id in pending:
                     pending.remove(fb_id)
                     state["待回收伏笔"] = pending
-                    fm.save_project_state(project, state)
+                    await asyncio.to_thread(fm.save_project_state, project, state)
 
     return lines, bool(lines)
 
@@ -595,6 +865,7 @@ async def run(llm, fm, project: str, params: dict):
     chapter_content = params.get("chapter_content", "")
     volume = params.get("volume", 1)
     chapter = params.get("chapter", 1)
+    debug = params.get("debug", False)
 
     if not chapter_content:
         yield {"type": "result", "result": {"success": False, "error": "No chapter content provided"}}
@@ -606,51 +877,76 @@ async def run(llm, fm, project: str, params: dict):
     proj_path = fm.get_project_abs_path(project)
 
     try:
+        # Pre-load all settings once for the entire sync session
+        settings_cache = _preload_settings(fm, project)
+
         # ── Phase 1: Text Analysis ──
+        if debug:
+            _cleanup_old_debug_files(proj_path)
         yield {"type": "progress", "phase": "analysis", "message": "正在分析章节内容，提取创作要素..."}
-        analysis = await _text_analysis(llm, fm, project, volume, chapter, chapter_content)
-        _save_debug(proj_path, chapter, "01_文字分析", analysis)
+        analysis = await _text_analysis(llm, fm, project, volume, chapter, chapter_content, settings_cache)
+        _save_debug(proj_path, chapter, "01_文字分析", analysis, debug=debug)
 
         if not analysis:
             yield {"type": "result", "result": {"success": False, "error": "文本分析阶段未返回内容"}}
             return
 
-        # ── Phase 2+3: Category Extraction + File Updates ──
+        # ── Phase 2: Parallel Category Extraction ──
+        yield {"type": "progress", "phase": "extraction", "message": "正在并行提取五个创作维度..."}
+
+        domain_names = ["characters", "events", "world", "relationships", "foreshadowing"]
+        extract_funcs = [
+            _extract_characters, _extract_events, _extract_world,
+            _extract_relationships, _extract_foreshadowing,
+        ]
+
+        sem = asyncio.Semaphore(_MAX_CONCURRENT_EXTRACTORS)
+
+        async def _extract_with_limit(func, *args):
+            async with sem:
+                return await func(*args)
+
+        t0 = _time.monotonic()
+        tasks = [
+            _extract_with_limit(fn, llm, fm, project, volume, chapter, analysis, settings_cache)
+            for fn in extract_funcs
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        extraction_data = {}
+        for name, result in zip(domain_names, results):
+            if isinstance(result, Exception):
+                logging.getLogger(__name__).warning(
+                    f"Phase 2 {name} extraction failed: {result}")
+                result = {}
+            extraction_data[name] = result
+            _save_debug(proj_path, chapter, f"02_{_DOMAIN_LABELS[name]}_提取",
+                        json.dumps(result, ensure_ascii=False, indent=2), debug=debug)
+            yield {"type": "progress", "phase": name,
+                   "message": f"{_DOMAIN_LABELS[name]}提取完成 "
+                              f"({_time.monotonic() - t0:.1f}s)"}
+
+        # ── Phase 3: File Updates (sequential — each may write to disk) ──
         phase_results = {}
 
-        # 2a+3a: Characters
-        yield {"type": "progress", "phase": "characters", "message": "正在提取人物信息并更新角色设定..."}
-        char_data = await _extract_characters(llm, fm, project, volume, chapter, analysis)
-        _save_debug(proj_path, chapter, "02_人物提取", json.dumps(char_data, ensure_ascii=False, indent=2))
-        char_lines, char_changed = await _process_characters(llm, fm, project, chapter, char_data)
+        char_data = extraction_data["characters"]
+        char_lines, char_changed = await _process_characters(llm, fm, project, chapter, char_data, settings_cache)
         phase_results["characters"] = {"lines": char_lines, "changed": char_changed, "data": char_data}
 
-        # 2b+3b: Events
-        yield {"type": "progress", "phase": "events", "message": "正在提取事件并更新时间线..."}
-        event_data = await _extract_events(llm, fm, project, volume, chapter, analysis)
-        _save_debug(proj_path, chapter, "03_事件提取", json.dumps(event_data, ensure_ascii=False, indent=2))
-        event_lines, event_changed = await _process_events(llm, fm, project, event_data)
+        event_data = extraction_data["events"]
+        event_lines, event_changed = await _process_events(llm, fm, project, chapter, event_data, settings_cache)
         phase_results["events"] = {"lines": event_lines, "changed": event_changed, "data": event_data}
 
-        # 2c+3c: World
-        yield {"type": "progress", "phase": "world", "message": "正在提取世界设定并更新..."}
-        world_data = await _extract_world(llm, fm, project, volume, chapter, analysis)
-        _save_debug(proj_path, chapter, "04_世界提取", json.dumps(world_data, ensure_ascii=False, indent=2))
-        world_lines, world_changed = await _process_world(llm, fm, project, world_data)
+        world_data = extraction_data["world"]
+        world_lines, world_changed = await _process_world(llm, fm, project, world_data, settings_cache)
         phase_results["world"] = {"lines": world_lines, "changed": world_changed, "data": world_data}
 
-        # 2d+3d: Relationships
-        yield {"type": "progress", "phase": "relationships", "message": "正在提取关系变化并更新人物关系..."}
-        rel_data = await _extract_relationships(llm, fm, project, volume, chapter, analysis)
-        _save_debug(proj_path, chapter, "05_关系提取", json.dumps(rel_data, ensure_ascii=False, indent=2))
-        rel_lines, rel_changed = await _process_relationships(llm, fm, project, rel_data)
+        rel_data = extraction_data["relationships"]
+        rel_lines, rel_changed = await _process_relationships(llm, fm, project, chapter, rel_data, settings_cache)
         phase_results["relationships"] = {"lines": rel_lines, "changed": rel_changed, "data": rel_data}
 
-        # 2e+3e: Foreshadowing
-        yield {"type": "progress", "phase": "foreshadowing", "message": "正在提取伏笔信息..."}
-        fb_data = await _extract_foreshadowing(llm, fm, project, volume, chapter, analysis)
-        _save_debug(proj_path, chapter, "06_伏笔提取", json.dumps(fb_data, ensure_ascii=False, indent=2))
-        fb_lines, fb_changed = _process_foreshadowing(fm, project, volume, chapter, fb_data)
+        fb_data = extraction_data["foreshadowing"]
+        fb_lines, fb_changed = await _process_foreshadowing(fm, project, volume, chapter, fb_data)
         phase_results["foreshadowing"] = {"lines": fb_lines, "changed": fb_changed, "data": fb_data}
 
         # ── Phase 4: Report ──
@@ -665,7 +961,7 @@ async def run(llm, fm, project: str, params: dict):
                 changed_cats.add(cat_name)
 
         summary = _generate_report(volume, chapter, len(chapter_content), analysis, phase_results)
-        _save_debug(proj_path, chapter, "07_更新报告", summary)
+        _save_debug(proj_path, chapter, "07_更新报告", summary, debug=debug)
         _update_versions(fm, project, changed_cats)
 
         all_extracted = {

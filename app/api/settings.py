@@ -560,23 +560,41 @@ def _extract_char_name(instruction: str) -> str:
     return m.group(1).strip() if m else "新角色"
 
 
+# Standard H2 section headers within a character profile — NOT character names
+_CHAR_PROFILE_H2 = {
+    '基本信息', '外貌特征', '性格特点', '能力设定', '物品装备',
+    '重要经历', '当前状态', '人物关系', '成长轨迹', '备注',
+    '已拥有能力', '特殊天赋', '战斗风格', '身份背景', '故事经历',
+    '背景故事', '角色经历', '实力等级', '修炼体系', '功法技能',
+}
+
+
 def _split_characters(markdown_text: str) -> list:
     """Split a multi-character markdown into individual (name, content) pairs.
 
     Detects sections by matching h1 headers like:
       # 角色名 - 人物设定
       # 角色名
+    When no h1 is found, tries h2 headers that look like character names
+    (filtering out standard profile section headers like 基本信息, 外貌特征).
+    Falls back to extracting the name from the - 姓名： field.
     Returns a list of (char_name, char_content) tuples.
     """
-    # Find all h1 headers first, fall back to h2
     h1_pattern = re.compile(r'^# (.+)$', re.MULTILINE)
     matches = list(h1_pattern.finditer(markdown_text))
 
     if not matches:
         h2_pattern = re.compile(r'^## (.+)$', re.MULTILINE)
-        matches = list(h2_pattern.finditer(markdown_text))
+        h2_matches = list(h2_pattern.finditer(markdown_text))
+        # Only split by H2 headings that don't look like standard profile sections
+        matches = [m for m in h2_matches
+                   if m.group(1).strip() not in _CHAR_PROFILE_H2]
 
     if not matches:
+        # Single character without explicit name heading — extract from content
+        name_match = re.search(r'(?:姓名|名称)[：:]\s*(.+?)$', markdown_text, re.MULTILINE)
+        if name_match:
+            return [(name_match.group(1).strip(), markdown_text.strip())]
         return []
 
     entries = []
@@ -644,7 +662,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 if await check_disconnected(request):
                     return
                 full_text = ""
-                stream = llm.chat_messages(messages, stream=True)
+                stream = await llm.chat_messages(messages, stream=True)
                 chunk_count = 0
                 async for chunk_type, chunk_text in stream:
                     if chunk_type == "reasoning":
@@ -677,7 +695,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 if await check_disconnected(request):
                     return
                 full_text = ""
-                stream = llm.chat_messages(messages, stream=True)
+                stream = await llm.chat_messages(messages, stream=True)
                 chunk_count = 0
                 async for chunk_type, chunk_text in stream:
                     if chunk_type == "reasoning":
@@ -756,11 +774,13 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 if st == "world":
                     fm.write_world_setting(project, full_text)
                 elif st == "character":
-                    # Split multi-character output into individual files
                     char_entries = _split_characters(full_text)
-                    for char_name, char_content in char_entries:
-                        if char_name and char_content.strip():
-                            fm.write_character(project, char_name, char_content.strip())
+                    if char_entries:
+                        for char_name, char_content in char_entries:
+                            if char_name and char_content.strip():
+                                fm.write_character(project, char_name, char_content.strip())
+                    else:
+                        fm.write_character(project, "新角色", full_text)
                 elif st == "timeline":
                     fm.write_background_timeline(project, full_text)
                 elif st == "relationship":

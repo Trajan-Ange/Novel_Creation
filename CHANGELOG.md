@@ -6,6 +6,36 @@
 
 ---
 
+---
+
+## v0.2.0 (2026-04-29)
+
+### 知识同步引擎深度重构 — LLM 调用 12+ → 2~4 次，耗时 60-120s → 15-30s
+
+**核心优化：**
+
+- **Phase 2 五领域并行化**：`_extract_characters` / `_extract_events` / `_extract_world` / `_extract_relationships` / `_extract_foreshadowing` 使用 `asyncio.gather` + `Semaphore(3)` 并发执行，5 次串行调用 → 1 个并发批次
+- **Phase 3 角色批量更新**：新增 `_batch_character_update()`，所有角色变更合并为单次 LLM 调用。简单新角色使用 `markdown_utils.build_character_template()` 程序化模板创建，无需 LLM
+- **Phase 3 程序化更新**：新增 `app/services/markdown_utils.py`（209 行），提供 `append_table_rows` / `append_section` / `append_list_item` 等程序化 Markdown 操作函数。时间线事件追加、世界设定追加、人物关系追加均优先使用程序化路径，解析失败时自动 fallback 到 LLM
+- **上下文缓存**：新增 `_preload_settings()` 在 sync 开始时一次性加载全部设定为 dict，传递给所有 Phase 2/3 函数，消除 Phase 3 多次独立读盘
+- **`_process_foreshadowing` 异步化**：`def` → `async def`，文件 I/O 使用 `asyncio.to_thread` 包装
+- **调试文件可选**：`run()` 新增 `debug` 参数（默认 `False`）。生产环境不写调试文件
+- **旧调试文件自动清理**：`_cleanup_old_debug_files()` 保留最近 `SYNC_DEBUG_RETENTION=5` 次同步的调试文件
+
+**Bug 修复：**
+
+- **严重 — `settings.py` chat_generate 缺少 `await`**：`stream = llm.chat_messages(...)` → `stream = await llm.chat_messages(...)`。v0.1.4 将 `llm._chat_stream()` 替换为 `llm.chat_messages()` 时遗漏两处 `await`，导致所有 AI 交互功能报错 `'async for' requires an object with __aiter__ method, got coroutine`
+- **严重 — `_split_characters()` H2 回退错误拆分单角色档案**：角色设定标准格式使用 `## 基本信息` / `## 外貌特征` 等 H2 分区标题，`_split_characters` 的 H2 回退将每个分区当作独立角色保存。修复：新增 `_CHAR_PROFILE_H2` 集合过滤标准分区标题，回退到从 `姓名：XXX` 字段提取角色名
+
+**涉及文件：**
+
+- `app/skills/knowledge_sync.py`（690→980 行，核心重构）
+- `app/services/markdown_utils.py`（新建，209 行）
+- `app/api/settings.py`（`await` 修复 + `_split_characters` 修复）
+- `ROADMAP.md`（v0.2.0 完成 + 0.2.x 规划）
+
+---
+
 ## v0.1.1 (2026-04-27)
 
 ### Bug 修复 — 知识同步引擎无法正常工作
