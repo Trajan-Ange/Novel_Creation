@@ -2,7 +2,7 @@
 
 AI 辅助小说创作管理工具 — 从世界观构建、人物设计到大纲规划、正文撰写的全流程支持。
 
-![版本](https://img.shields.io/badge/版本-0.2.0-blue)
+![版本](https://img.shields.io/badge/版本-0.2.1-blue)
 ![Python](https://img.shields.io/badge/python-3.10+-green)
 ![许可证](https://img.shields.io/badge/许可证-MIT-lightgrey)
 

@@ -4,6 +4,8 @@ Generates hierarchical outlines at three levels:
 Book outline -> Volume outline -> Chapter outline.
 """
 
+from app.services.context_builder import get_truncated_settings
+
 SYSTEM_PROMPT_BOOK = """你是一位资深小说架构师，专精于长篇网络小说的结构设计。
 
 你的任务是根据创作依据（世界设定、人物设定等）创建全书大纲。
@@ -134,44 +136,44 @@ async def run(llm, fm, project: str, params: dict) -> dict:
     volume = params.get("volume", 1)
     chapter = params.get("chapter", 1)
 
-    context_docs = fm.get_all_settings(project)
+    context_docs = get_truncated_settings(fm, project)
     user_message = instruction
 
     if action == "create_book":
         system_prompt = SYSTEM_PROMPT_BOOK
         existing = fm.read_book_outline(project)
         if existing:
-            context_docs.insert(0, {"title": "当前全书大纲", "content": existing})
+            context_docs.insert(0, {"title": "当前全书大纲", "content": existing[:3000]})
         user_message = f"请根据已有设定为《{project}》创建全书大纲。{instruction}".strip()
 
     elif action == "create_volume":
         system_prompt = SYSTEM_PROMPT_VOLUME
         book_outline = fm.read_book_outline(project)
         if book_outline:
-            context_docs.insert(0, {"title": "全书大纲（参考）", "content": book_outline})
+            context_docs.insert(0, {"title": "全书大纲（参考）", "content": book_outline[:3000]})
         # Include previous volume outlines
         for v in fm.list_volume_outlines(project):
             if v < volume:
                 v_content = fm.read_volume_outline(project, v)
                 if v_content:
-                    context_docs.append({"title": f"第{v}卷大纲（已完成）", "content": v_content})
+                    context_docs.append({"title": f"第{v}卷大纲（已完成）", "content": v_content[:2000]})
         user_message = f"请为《{project}》第{volume}卷创建卷大纲。{instruction}".strip()
 
     elif action == "create_chapter":
         system_prompt = SYSTEM_PROMPT_CHAPTER
         book_outline = fm.read_book_outline(project)
         if book_outline:
-            context_docs.insert(0, {"title": "全书大纲", "content": book_outline})
+            context_docs.insert(0, {"title": "全书大纲", "content": book_outline[:3000]})
         vol_outline = fm.read_volume_outline(project, volume)
         if vol_outline:
-            context_docs.insert(0, {"title": f"第{volume}卷大纲", "content": vol_outline})
+            context_docs.insert(0, {"title": f"第{volume}卷大纲", "content": vol_outline[:2000]})
         # Include recent chapter outlines
         chapters = sorted(fm.list_chapter_outlines(project, volume))
         for ch in chapters[-3:]:
             if ch < chapter:
                 ch_content = fm.read_chapter_outline(project, volume, ch)
                 if ch_content:
-                    context_docs.append({"title": f"第{ch}章大纲（已写）", "content": ch_content})
+                    context_docs.append({"title": f"第{ch}章大纲（已写）", "content": ch_content[:1500]})
         # Include recent chapter content for continuity
         written_chaps = fm.list_chapters(project, volume)
         for ch in sorted(written_chaps)[-2:]:

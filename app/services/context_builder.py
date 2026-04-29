@@ -4,6 +4,58 @@ All context-building logic that was previously scattered across settings.py,
 chapter_write.py, outline.py, and writing_assist.py lives here.
 """
 
+# Per-type character truncation limits for context assembly
+_TRUNCATION_LIMITS = {
+    "世界设定": 3000,
+    "背景时间线": 2000,
+    "故事时间线": 2000,
+    "人物关系": 2000,
+    "风格指南": 1500,
+}
+_CHAR_MAX_COUNT = 8
+_CHAR_MAX_LENGTH = 500
+
+
+def get_truncated_settings(fm, project: str) -> list[dict]:
+    """Return all settings with per-type truncation applied.
+
+    Same structure as fm.get_all_settings() but each doc's content is capped
+    to prevent context overflow. Characters limited to 8 entries at 500 chars each.
+    """
+    docs = fm.get_all_settings(project)
+    char_count = 0
+    result = []
+    for doc in docs:
+        title = doc.get("title", "")
+        content = doc.get("content", "")
+        if title.startswith("人物设定："):
+            if char_count >= _CHAR_MAX_COUNT:
+                continue
+            char_count += 1
+            if len(content) > _CHAR_MAX_LENGTH:
+                content = content[:_CHAR_MAX_LENGTH] + "...(已截断)"
+        else:
+            limit = _TRUNCATION_LIMITS.get(title)
+            if limit and len(content) > limit:
+                content = content[:limit] + "...(已截断)"
+        result.append({"title": title, "content": content})
+    return result
+
+
+def build_truncated_context_parts(fm, project: str) -> list[str]:
+    """Return truncated context as a list of strings (one per line block).
+
+    Uses get_truncated_settings() internally. Suitable as a drop-in
+    replacement for the inline get_all_settings() + format pattern.
+    """
+    docs = get_truncated_settings(fm, project)
+    parts = ["参考以下已有资料：\n"]
+    for doc in docs:
+        parts.append(f"【{doc['title']}】")
+        parts.append(doc["content"])
+        parts.append("")
+    return parts
+
 
 def build_full_context(fm, project: str) -> str:
     """Build a complete context string from all project settings.

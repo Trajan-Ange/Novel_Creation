@@ -8,6 +8,38 @@
 
 ---
 
+## v0.2.1 (2026-04-29)
+
+### 上下文优化与健壮性
+
+**上下文膨胀修复：**
+
+- **H5 — 对话生成上下文截断**：`context_builder.py` 从死代码激活为核心服务。新增 `get_truncated_settings()` 和 `build_truncated_context_parts()`，按类型截断（世界 3000 字 / 角色 500 字×8 / 时间线 2000 字 / 关系 2000 字 / 风格 1500 字）。`settings.py` 两处 inline `get_all_settings()` 替换为截断版本，chat-generate 上下文从 150K+ tokens 降至 10-15K tokens
+- **H6 — 章节大纲生成上下文精简**：`outline.py` 用 `get_truncated_settings()` 替代全量加载，prepend/append 文档增加截断（全书大纲 3000 / 卷大纲 2000 / 章节大纲 1500 / 正文保持 2000），`create_chapter` 上下文从 ~210K tokens 降至 ~30K tokens
+- **重要度筛选**：`knowledge_sync.py` 新增 `_FILTERING_PREAMBLE`，注入 5 个 Phase 2 提取 prompt。忽略功能性路人、过渡性事件、无命名背景景物，减少 Phase 3 无效更新
+- **`list_characters()` 过滤备份文件**：`file_manager.py` 过滤 `---.md` 后缀的备份文件，防止出现重复角色名
+
+**健壮性增强：**
+
+- **H7 — 时间线拆分逻辑加固**：`timeline.py` 新增 `split_timeline_content()` 函数，多策略 regex 匹配（H1/H2/bare/中英文变体），三级回退链。替换原有 14 行脆弱的 `str.split()` 逻辑
+- **时间线保存 Bug 修复**：`settings.py` 两处 timeline 保存（stream-generate + chat-generate）从"全部写入背景时间线"改为调用 `split_timeline_content()` 拆分后分别写入背景和故事时间线
+- **SSE 自动重连**：`sse.js` SSEClient 新增指数退避重连（baseDelay=1s, maxDelay=30s, maxReconnect=5），`_intentionalDisconnect` 标记防止误重连。`project-list.js` wizard SSE client 提升为模块级变量，`state.js` navigate 增加清理
+
+**涉及文件：**
+
+- `app/services/context_builder.py`（新增 `get_truncated_settings` + `build_truncated_context_parts`）
+- `app/api/settings.py`（上下文截断 + 阈值统一 + timeline 拆分修复）
+- `app/skills/outline.py`（上下文截断 + import 新增）
+- `app/skills/timeline.py`（`split_timeline_content` 新增 + 拆分逻辑替换）
+- `app/skills/knowledge_sync.py`（`_FILTERING_PREAMBLE` 注入 5 个 prompt）
+- `app/storage/file_manager.py`（`list_characters` 过滤备份文件）
+- `app/static/js/utils/sse.js`（重连逻辑重写）
+- `app/static/js/components/project-list.js`（wizardSSEClient 模块级）
+- `app/static/js/state.js`（wizardSSEClient 清理）
+- `ROADMAP.md`（v0.2.1 标记完成）
+
+---
+
 ## v0.2.0 (2026-04-29)
 
 ### 知识同步引擎深度重构 — LLM 调用 12+ → 2~4 次，耗时 60-120s → 15-30s

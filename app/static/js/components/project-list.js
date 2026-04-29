@@ -1,4 +1,6 @@
 /** Project list and creation */
+let wizardSSEClient = null;
+
 function openProjectModal() {
   document.getElementById('project-modal').style.display = 'flex';
   document.getElementById('lore-source-group').style.display = 'none';
@@ -214,8 +216,9 @@ async function runWizardStep() {
   // Map wizard step key to SSE setting_type
   const settingType = step.key === 'outline' ? 'book_outline' : step.key;
 
-  const sseClient = new SSEClient();
-  sseClient.onEvent = (event) => {
+  if (wizardSSEClient) wizardSSEClient.disconnect();
+  wizardSSEClient = new SSEClient();
+  wizardSSEClient.onEvent = (event) => {
     switch (event.type) {
       case 'status':
         // Update the header
@@ -259,14 +262,14 @@ async function runWizardStep() {
         break;
     }
   };
-  sseClient.onError = (err) => {
+  wizardSSEClient.onError = (err) => {
     if (streamEl) {
       streamEl.innerHTML = '<div class="error-message">连接出错：' + err.message + '</div>';
     }
     if (genBtn) genBtn.disabled = false;
   };
 
-  await sseClient.connect('/api/settings/stream-generate', {
+  await wizardSSEClient.connect('/api/settings/stream-generate', {
     body: {
       project: wizardState.project,
       setting_type: settingType,

@@ -11,6 +11,7 @@ function navigate(section) {
   if (typeof chapterSSE !== 'undefined' && chapterSSE) { chapterSSE.disconnect(); chapterSSE = null; }
   if (typeof outlineStreamingClient !== 'undefined' && outlineStreamingClient) { outlineStreamingClient.disconnect(); outlineStreamingClient = null; }
   if (typeof settingsChatClient !== 'undefined' && settingsChatClient) { settingsChatClient.disconnect(); settingsChatClient = null; }
+  if (typeof wizardSSEClient !== 'undefined' && wizardSSEClient) { wizardSSEClient.disconnect(); wizardSSEClient = null; }
 
   AppState.currentSection = section;
   document.querySelectorAll('#sidebar li[data-section]').forEach(el => {

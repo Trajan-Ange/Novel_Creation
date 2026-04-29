@@ -1,4 +1,4 @@
-/** Server-Sent Events handler */
+/** Server-Sent Events handler with optional automatic reconnection */
 class SSEClient {
   constructor(options = {}) {
     this.abortController = null;
@@ -6,19 +6,37 @@ class SSEClient {
     this.onError = null;
     this.timeout = options.timeout || 300000; // 5 min default
     this._timeoutId = null;
+
+    // Reconnection settings
+    this.reconnect = options.reconnect !== false; // default true
+    this.maxReconnect = options.maxReconnect || 5;
+    this.baseDelay = options.baseDelay || 1000;
+    this.maxDelay = options.maxDelay || 30000;
+    this.onReconnecting = options.onReconnecting || null;
+    this.onComplete = options.onComplete || null;
+    this._intentionalDisconnect = false;
+    this._reconnectAttempt = 0;
+    this._connectUrl = null;
+    this._connectOptions = null;
   }
 
   async connect(url, options = {}) {
     this.disconnect();
+    this._intentionalDisconnect = false;
     this.abortController = new AbortController();
+
+    // Stash for retry
+    this._connectUrl = url;
+    this._connectOptions = options;
 
     const { method = 'POST', body, headers = {} } = options;
 
-    // Set up timeout
     this._timeoutId = setTimeout(() => {
       this.abortController.abort();
       if (this.onError) this.onError(new Error('SSE 连接超时'));
     }, this.timeout);
+
+    let completed = false;
 
     try {
       const response = await fetch(url, {
@@ -34,7 +52,10 @@ class SSEClient {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          completed = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
@@ -51,8 +72,32 @@ class SSEClient {
           }
         }
       }
+
+      // Natural completion — reset reconnect counter
+      this._reconnectAttempt = 0;
+      if (this.onComplete) this.onComplete();
+
     } catch (err) {
-      if (err.name !== 'AbortError' && this.onError) {
+      if (err.name === 'AbortError') {
+        if (this._intentionalDisconnect) return;
+      }
+
+      // Attempt reconnection
+      if (this.reconnect && !this._intentionalDisconnect && this._reconnectAttempt < this.maxReconnect) {
+        this._reconnectAttempt++;
+        const delay = Math.min(
+          this.baseDelay * Math.pow(2, this._reconnectAttempt - 1) + Math.random() * 1000,
+          this.maxDelay
+        );
+        if (this.onReconnecting) {
+          this.onReconnecting({ attempt: this._reconnectAttempt, delay, error: err });
+        }
+        console.warn(`SSE reconnecting in ${Math.round(delay)}ms (attempt ${this._reconnectAttempt}/${this.maxReconnect})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        if (!this._intentionalDisconnect) {
+          return this._retryConnect();
+        }
+      } else if (this.onError && !this._intentionalDisconnect) {
         this.onError(err);
       }
     } finally {
@@ -61,7 +106,12 @@ class SSEClient {
     }
   }
 
+  async _retryConnect() {
+    return this.connect(this._connectUrl, this._connectOptions);
+  }
+
   disconnect() {
+    this._intentionalDisconnect = true;
     clearTimeout(this._timeoutId);
     this._timeoutId = null;
     if (this.abortController) {

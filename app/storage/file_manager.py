@@ -207,7 +207,7 @@ class FileManager:
         return [
             f.replace(".md", "")
             for f in os.listdir(chars_dir)
-            if f.endswith(".md")
+            if f.endswith(".md") and not f.endswith("---.md")
         ]
 
     def delete_character(self, project: str, char_name: str):

@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from app.api.utils.sse_helpers import check_disconnected, create_sse_sender
 from app.skills.world_design import run as world_skill_run, SYSTEM_PROMPT as WORLD_SYSTEM_PROMPT
 from app.skills.character_design import run as character_skill_run, SYSTEM_PROMPT as CHARACTER_SYSTEM_PROMPT
-from app.skills.timeline import run as timeline_skill_run, SYSTEM_PROMPT as TIMELINE_SYSTEM_PROMPT
+from app.skills.timeline import run as timeline_skill_run, SYSTEM_PROMPT as TIMELINE_SYSTEM_PROMPT, split_timeline_content
 from app.skills.relationship import run as relationship_skill_run, SYSTEM_PROMPT as RELATIONSHIP_SYSTEM_PROMPT
 from app.skills.writing_assist import run as writing_assist_run, SYSTEM_PROMPT_STYLE
 from app.skills.outline import SYSTEM_PROMPT_BOOK, SYSTEM_PROMPT_VOLUME, SYSTEM_PROMPT_CHAPTER
+from app.services.context_builder import build_truncated_context_parts
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -222,13 +223,8 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
             instruction = body.instruction
             project = body.project
 
-            # Gather all settings as context
-            context_docs = fm.get_all_settings(project)
-            context_parts = ["参考以下已有资料：\n"]
-            for doc in context_docs:
-                context_parts.append(f"【{doc['title']}】")
-                context_parts.append(doc["content"])
-                context_parts.append("")
+            # Gather all settings as context (truncated)
+            context_parts = build_truncated_context_parts(fm, project)
 
             if st == "world":
                 existing = fm.read_world_setting(project)
@@ -335,7 +331,11 @@ async def stream_generate_setting(request: Request, body: StreamGenerateRequest)
                 else:
                     fm.write_character(project, "主角与主要配角", full_text)
             elif st == "timeline":
-                fm.write_background_timeline(project, full_text)
+                bg, story = split_timeline_content(full_text)
+                if bg:
+                    fm.write_background_timeline(project, bg)
+                if story:
+                    fm.write_story_timeline(project, story)
             elif st == "relationship":
                 fm.write_relationship(project, full_text)
             elif st == "style":
@@ -515,7 +515,7 @@ def _get_relevant_context(fm, project: str, setting_type: str, volume: int = 1) 
         chars = fm.list_characters(project)
         if chars:
             char_texts = []
-            char_limit = 2000 if setting_type == "relationship" else 800
+            char_limit = 2000 if setting_type == "relationship" else 500
             for c in chars[:8]:  # limit to avoid overflow
                 content = fm.read_character(project, c)
                 if content:
@@ -526,30 +526,30 @@ def _get_relevant_context(fm, project: str, setting_type: str, volume: int = 1) 
     if setting_type not in ("timeline", "world"):
         bg = fm.read_background_timeline(project)
         if bg:
-            parts.append(f"【背景时间线（已完成）】\n{bg[:1500]}\n")
+            parts.append(f"【背景时间线（已完成）】\n{bg[:2000]}\n")
         story = fm.read_story_timeline(project)
         if story:
-            parts.append(f"【故事时间线（已完成）】\n{story[:1500]}\n")
+            parts.append(f"【故事时间线（已完成）】\n{story[:2000]}\n")
 
     if setting_type != "relationship":
         rel = fm.read_relationship(project)
         if rel:
-            parts.append(f"【人物关系（已完成）】\n{rel[:1500]}\n")
+            parts.append(f"【人物关系（已完成）】\n{rel[:2000]}\n")
 
     if setting_type != "style":
         style = fm.read_style_guide(project)
         if style:
-            parts.append(f"【风格指南（已完成）】\n{style[:1000]}\n")
+            parts.append(f"【风格指南（已完成）】\n{style[:1500]}\n")
 
     # Outline context for volume/chapter outline creation
     if setting_type in ("volume_outline", "chapter_outline"):
         book = fm.read_book_outline(project)
         if book:
-            parts.append(f"【全书大纲（已完成）】\n{book[:2000]}\n")
+            parts.append(f"【全书大纲（已完成）】\n{book[:3000]}\n")
     if setting_type == "chapter_outline":
         vol = fm.read_volume_outline(project, volume)
         if vol:
-            parts.append(f"【第{volume}卷大纲（已完成）】\n{vol[:2000]}\n")
+            parts.append(f"【第{volume}卷大纲（已完成）】\n{vol[:3000]}\n")
 
     return "\n".join(parts)
 
@@ -731,12 +731,7 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                 conv_parts.append(f"请根据以上对话内容，生成完整的{type_name}。综合用户的所有需求和想法，输出结构化的markdown文档。")
                 user_msg = "\n".join(conv_parts)
 
-                context_docs = fm.get_all_settings(project)
-                context_parts = ["参考以下已有资料：\n"]
-                for doc in context_docs:
-                    context_parts.append(f"【{doc['title']}】")
-                    context_parts.append(doc["content"])
-                    context_parts.append("")
+                context_parts = build_truncated_context_parts(fm, project)
 
                 if st == "world":
                     existing = fm.read_world_setting(project)
@@ -782,7 +777,11 @@ async def chat_generate(request: Request, body: ChatGenerateRequest):
                     else:
                         fm.write_character(project, "新角色", full_text)
                 elif st == "timeline":
-                    fm.write_background_timeline(project, full_text)
+                    bg, story = split_timeline_content(full_text)
+                    if bg:
+                        fm.write_background_timeline(project, bg)
+                    if story:
+                        fm.write_story_timeline(project, story)
                 elif st == "relationship":
                     fm.write_relationship(project, full_text)
                 elif st == "style":
