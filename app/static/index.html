@@ -4,10 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小说创作管理系统</title>
-<link rel="stylesheet" href="/css/main.css?v=11">
-<link rel="stylesheet" href="/css/editor.css?v=11">
-<link rel="stylesheet" href="/css/chat.css?v=11">
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+// Apply theme/density/font before page render to prevent flash (FOIT)
+(function(){
+  var t=localStorage.getItem('novel-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+  var d=localStorage.getItem('novel-density');if(d)document.documentElement.setAttribute('data-density',d);
+  var f=localStorage.getItem('novel-font-scale');if(f)document.documentElement.setAttribute('data-font-scale',f);
+})();
+</script>
+<link rel="stylesheet" href="/css/main.css?v=12">
+<link rel="stylesheet" href="/css/editor.css?v=12">
+<link rel="stylesheet" href="/css/chat.css?v=12">
+<script src="/vendor/marked.min.js?v=12"></script>
 </head>
 <body>
 
@@ -16,6 +24,7 @@
     <h1>小说创作管理系统</h1>
     <div id="header-actions">
       <span id="project-indicator">未选择项目</span>
+      <button id="btn-theme" class="btn-icon" title="切换主题">🎨</button>
       <button id="btn-config" class="btn-icon" title="API 配置">⚙</button>
     </div>
   </header>
@@ -121,25 +130,25 @@
   </div>
 </div>
 
-<script src="/js/utils/sse.js?v=11"></script>
+<script src="/js/utils/sse.js?v=12"></script>
 <!-- Context Menu -->
 <div id="context-menu" class="context-menu" style="display:none">
   <div class="context-menu-item danger" data-action="delete-project">删除项目</div>
 </div>
 
-<script src="/js/utils/helpers.js?v=11"></script>
-<script src="/js/utils/dialog.js?v=11"></script>
-<script src="/js/api.js?v=11"></script>
-<script src="/js/state.js?v=11"></script>
-<script src="/js/components/config-panel.js?v=11"></script>
-<script src="/js/components/project-list.js?v=11"></script>
-<script src="/js/components/settings-editor.js?v=11"></script>
-<script src="/js/components/settings-chat.js?v=11"></script>
-<script src="/js/components/outline-tree.js?v=11"></script>
-<script src="/js/components/chapter-writer.js?v=11"></script>
-<script src="/js/components/chapter-manager.js?v=11"></script>
-<script src="/js/components/foreshadowing.js?v=11"></script>
-<script src="/js/app.js?v=11"></script>
+<script src="/js/utils/helpers.js?v=12"></script>
+<script src="/js/utils/dialog.js?v=12"></script>
+<script src="/js/api.js?v=12"></script>
+<script src="/js/state.js?v=12"></script>
+<script src="/js/components/config-panel.js?v=12"></script>
+<script src="/js/components/project-list.js?v=12"></script>
+<script src="/js/components/settings-editor.js?v=12"></script>
+<script src="/js/components/settings-chat.js?v=12"></script>
+<script src="/js/components/outline-tree.js?v=12"></script>
+<script src="/js/components/chapter-writer.js?v=12"></script>
+<script src="/js/components/chapter-manager.js?v=12"></script>
+<script src="/js/components/foreshadowing.js?v=12"></script>
+<script src="/js/app.js?v=12"></script>
 
 </body>
 </html>

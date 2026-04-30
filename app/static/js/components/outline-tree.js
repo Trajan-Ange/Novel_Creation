@@ -44,7 +44,7 @@ async function loadOutlineTree(project) {
       }
       html += '</ul></li>';
     }
-    html += `<li><div class="outline-item" data-otype="new-volume" onclick="createNewVolume()" style="color:#27ae60;font-weight:600">
+    html += `<li><div class="outline-item" data-otype="new-volume" onclick="createNewVolume()" style="color:var(--color-success);font-weight:600">
       <span class="icon">＋</span> 新建卷大纲
     </div></li>`;
     html += '</ul>';
@@ -149,7 +149,7 @@ async function generateOutlineStream(level, vol, ch) {
     streamDiv.innerHTML = `
       <div class="wizard-result-content">
         <h4>AI 正在生成<span class="streaming-cursor" style="display:inline-block;vertical-align:middle"></span></h4>
-        <div id="outline-stream-text" class="markdown-content" style="max-height:500px;overflow-y:auto;border:1px solid #eee;padding:12px;border-radius:6px;background:#fff;min-height:60px"></div>
+        <div id="outline-stream-text" class="markdown-content" style="max-height:500px;overflow-y:auto;border:1px solid var(--border-color-light);padding:12px;border-radius:6px;background:var(--color-surface);min-height:60px"></div>
         <div id="outline-stream-actions" style="margin-top:12px;display:none;gap:8px">
           <button class="btn btn-success btn-sm" onclick="acceptOutlineStream('${level}', ${vol || 0}, ${ch || 0})">接受</button>
           <button class="btn btn-secondary btn-sm" onclick="generateOutlineStream('${level}', ${vol || 0}, ${ch || 0})">重新生成</button>

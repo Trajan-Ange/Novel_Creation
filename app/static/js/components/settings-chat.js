@@ -72,7 +72,7 @@ function _initChatUI(containerId, type, height, onClose) {
         <span style="margin-left:12px;font-weight:600;font-size:15px">AI 对话创建：${label}</span>
       </div>
       <div>
-        <button class="btn btn-sm" id="btn-chat-restart" style="display:none;background:#e0e0e0" onclick="restartChat()">重新开始</button>
+        <button class="btn btn-sm" id="btn-chat-restart" style="display:none;background:var(--btn-secondary-bg)" onclick="restartChat()">重新开始</button>
         <button class="btn btn-success btn-sm" id="btn-chat-generate" style="display:none" onclick="generateFromChat()">生成${label}</button>
       </div>
     </div>
@@ -80,7 +80,7 @@ function _initChatUI(containerId, type, height, onClose) {
       <div id="chat-msgs" class="chat-messages"></div>
       <div class="chat-input-area" id="chat-input-area" style="display:none">
         <input type="text" id="chat-input" placeholder="输入你的回答..."
-          style="flex:1;padding:10px 16px;border:1px solid #ddd;border-radius:20px;font-size:14px;outline:none"
+          style="flex:1;padding:10px 16px;border:1px solid var(--border-color);border-radius:20px;font-size:14px;outline:none"
           onkeydown="if(event.key==='Enter')sendChatMessage()">
         <button class="btn btn-primary btn-sm" id="btn-chat-send" onclick="sendChatMessage()">发送</button>
       </div>

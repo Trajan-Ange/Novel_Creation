@@ -127,7 +127,7 @@ async function renderCharacterSettings(container, project) {
     <div id="char-list">
       ${chars.length === 0 ? '<div class="empty-state"><p>暂无人物设定</p></div>' : ''}
       ${chars.map(c => `
-        <div class="card" style="cursor:pointer" onclick="viewCharacter('${escapeHtml(c)}')">
+        <div class="card char-card" style="cursor:pointer" data-char-name="${escapeHtml(c)}">
           <h3>${escapeHtml(c)}</h3>
         </div>
       `).join('')}
@@ -135,6 +135,11 @@ async function renderCharacterSettings(container, project) {
     <div id="char-detail" style="display:none"></div>
     <div id="char-editor" style="display:none"></div>
   `;
+  // Use event delegation for character card clicks (avoids onclick escaping issues)
+  document.getElementById('char-list').addEventListener('click', (e) => {
+    const card = e.target.closest('.char-card');
+    if (card) viewCharacter(card.dataset.charName);
+  });
 }
 
 async function viewCharacter(name) {
@@ -143,11 +148,12 @@ async function viewCharacter(name) {
   const detail = document.getElementById('char-detail');
   detail.style.display = 'block';
   document.getElementById('char-list').style.display = 'none';
+  const safeName = escapeOnclick(name);
   detail.innerHTML = `
     <div class="settings-toolbar">
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('char-list').style.display='block';document.getElementById('char-detail').style.display='none'">返回列表</button>
-      <button class="btn btn-secondary btn-sm" onclick="editCharacterManual('${name}')">手动编辑</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteCharacter('${name}')">删除</button>
+      <button class="btn btn-secondary btn-sm" onclick="editCharacterManual('${safeName}')">手动编辑</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCharacter('${safeName}')">删除</button>
     </div>
     <div class="markdown-content">${marked.parse(data.content || '无内容')}</div>
   `;
@@ -406,16 +412,17 @@ async function editCharacterManual(name) {
   const detail = document.getElementById('char-detail');
   detail.style.display = 'block';
   document.getElementById('char-list').style.display = 'none';
+  const safeName = escapeOnclick(name);
 
   detail.innerHTML = `
     <div class="settings-toolbar">
-      <button class="btn btn-secondary btn-sm" onclick="viewCharacter('${name}')">返回</button>
+      <button class="btn btn-secondary btn-sm" onclick="viewCharacter('${safeName}')">返回</button>
     </div>
     <div class="manual-editor">
       <textarea id="char-manual-edit-textarea" class="manual-edit-textarea">${escapeHtml(data.content || '')}</textarea>
       <div class="manual-editor-actions">
-        <button class="btn btn-primary btn-sm" onclick="saveCharacterManualEdit('${name}')">保存角色设定</button>
-        <button class="btn btn-secondary btn-sm" onclick="viewCharacter('${name}')">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="saveCharacterManualEdit('${safeName}')">保存角色设定</button>
+        <button class="btn btn-secondary btn-sm" onclick="viewCharacter('${safeName}')">取消</button>
       </div>
     </div>
   `;

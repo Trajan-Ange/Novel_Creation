@@ -62,6 +62,11 @@ document.getElementById('btn-config').addEventListener('click', () => {
   if (typeof openConfig === 'function') openConfig();
 });
 
+document.getElementById('btn-theme').addEventListener('click', () => {
+  const next = cycleTheme();
+  // Brief toast-like feedback could be added here
+});
+
 (async function init() {
   try {
     const cfg = await API.config.get();

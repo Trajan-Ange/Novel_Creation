@@ -37,11 +37,14 @@ async function createProject() {
 
       const loreResult = await API.sync.loreExtract(name, source, [], description);
       if (loreResult.success) {
-        // Apply lore to project settings
-        const data = loreResult.data || loreResult.result;
-        if (data.world_setting) {
-          await fetch(`/api/settings/${encodeURIComponent(name)}/world/generate`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ project: name, instruction: data.world_setting }) });
-        }
+        // Save all extracted sections directly to project files
+        const data = loreResult.data || loreResult.result || {};
+        await API.sync.loreApply(
+          name,
+          data.world_setting || '',
+          data.character_settings || [],
+          data.timeline || '',
+        );
         setProject(name);
         $content.innerHTML = `<div class="loading">世界观采集完成！正在初始化项目设定...</div>`;
         openCreationWizard(name, description);
@@ -80,7 +83,7 @@ function updateSidebarProjects() {
   API.projects.list().then(projects => {
     nav.innerHTML = projects.map(p => `
       <li data-project="${escapeHtml(p.name)}">${escapeHtml(p.name)}
-        <span style="float:right;font-size:11px;color:#95a5a6">${escapeHtml(p.stage || '')}</span>
+        <span style="float:right;font-size:11px;color:var(--color-sidebar-muted)">${escapeHtml(p.stage || '')}</span>
       </li>
     `).join('') + `<li class="nav-create">+ 创建新项目</li>`;
     if (projects.length === 0) {
@@ -113,7 +116,7 @@ function openCreationWizard(name, description) {
       <h2>项目已创建：《${escapeHtml(name)}》</h2>
       <div class="card" style="margin-top:16px">
         <h3>AI 生成设定需要配置 API</h3>
-        <p style="color:#e67e22;margin:10px 0">尚未配置 API 密钥，无法自动生成世界设定、人物等创作依据。</p>
+        <p style="color:var(--color-warning);margin:10px 0">尚未配置 API 密钥，无法自动生成世界设定、人物等创作依据。</p>
         <p>你可以：</p>
         <ul style="margin:8px 0;padding-left:20px">
           <li>点击右上角齿轮图标配置 API，然后回来继续</li>
@@ -152,7 +155,7 @@ function renderWizardFrame() {
   $content.innerHTML = `
     <div class="section-header">
       <h2>项目创建向导：《${wizardState.project}》</h2>
-      <span style="font-size:13px;color:#999">步骤 ${wizardState.currentStep + 1}/${steps.length}</span>
+      <span style="font-size:13px;color:var(--color-text-subtle)">步骤 ${wizardState.currentStep + 1}/${steps.length}</span>
     </div>
     <div class="wizard-progress">${stepsHtml}</div>
     <div id="wizard-step-content"></div>
@@ -177,7 +180,7 @@ function renderWizardStep(stepIndex) {
   container.innerHTML = `
     <div class="card wizard-step-card">
       <h3>${step.icon} ${step.label}</h3>
-      <p style="color:#777;margin-bottom:12px">为你的小说设定${step.label}。输入具体指令（可选），或直接点击自动生成。</p>
+      <p style="color:var(--color-text-muted);margin-bottom:12px">为你的小说设定${step.label}。输入具体指令（可选），或直接点击自动生成。</p>
       <div class="form-group">
         <label>AI 指令（可选，留空则由AI自由发挥）</label>
         <textarea id="wizard-instruction" rows="3" placeholder="例如：东方仙侠世界、五行灵气体系、上古神魔大战背景..."></textarea>
@@ -201,7 +204,7 @@ async function runWizardStep() {
   resultDiv.innerHTML = `
     <div class="wizard-result-content">
       <h4>AI 正在生成<span class="streaming-cursor" style="display:inline-block;vertical-align:middle"></span></h4>
-      <div id="wizard-stream-content" class="markdown-content" style="max-height:400px;overflow-y:auto;border:1px solid #eee;padding:12px;border-radius:6px;background:#fff;min-height:60px"></div>
+      <div id="wizard-stream-content" class="markdown-content" style="max-height:400px;overflow-y:auto;border:1px solid var(--border-color-light);padding:12px;border-radius:6px;background:var(--color-surface);min-height:60px"></div>
       <div id="wizard-actions" style="margin-top:12px;display:none;gap:8px">
         <button class="btn btn-success" onclick="handleWizardAccept()">接受，继续下一步</button>
         <button class="btn btn-secondary" onclick="handleWizardRedo()">重新生成</button>
@@ -324,9 +327,9 @@ function finishWizard() {
     <div class="card" style="margin-top:16px">
       <h3>创建摘要</h3>
       <div style="display:flex;gap:24px;margin:12px 0">
-        <div><span style="color:#27ae60;font-size:24px;font-weight:600">${done}</span><br>已完成</div>
-        <div><span style="color:#e67e22;font-size:24px;font-weight:600">${skipped}</span><br>已跳过</div>
-        <div><span style="color:#999;font-size:24px;font-weight:600">${total - done - skipped}</span><br>未完成</div>
+        <div><span style="color:var(--color-success);font-size:24px;font-weight:600">${done}</span><br>已完成</div>
+        <div><span style="color:var(--color-warning);font-size:24px;font-weight:600">${skipped}</span><br>已跳过</div>
+        <div><span style="color:var(--color-text-subtle);font-size:24px;font-weight:600">${total - done - skipped}</span><br>未完成</div>
       </div>
       <div style="margin-top:8px">
         ${wizardState.steps.map(s =>
@@ -351,7 +354,7 @@ async function renderProjectList() {
     nav.innerHTML = projects.map(p => `
       <li data-project="${p.name}">
         ${p.name}
-        <span style="float:right;font-size:11px;color:#95a5a6">${p.stage || ''}</span>
+        <span style="float:right;font-size:11px;color:var(--color-sidebar-muted)">${p.stage || ''}</span>
       </li>
     `).join('') + `<li class="nav-create">+ 创建新项目</li>`;
 
@@ -384,7 +387,7 @@ async function renderProjectList() {
         <div class="card project-card" style="cursor:pointer;position:relative" onclick="setProject('${p.name}')" data-project="${p.name}">
           <button class="btn btn-danger btn-sm" style="position:absolute;top:12px;right:12px;z-index:1" onclick="event.stopPropagation();deleteProject('${p.name}')">删除</button>
           <h3>${p.name}</h3>
-          <div style="display:flex;gap:16px;font-size:13px;color:#999">
+          <div style="display:flex;gap:16px;font-size:13px;color:var(--color-text-subtle)">
             <span>类型：${p.type}</span>
             <span>进度：第${p.volume}卷 第${p.chapter}章</span>
             <span>阶段：${p.stage}</span>

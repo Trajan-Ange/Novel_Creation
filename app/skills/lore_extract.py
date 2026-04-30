@@ -196,6 +196,8 @@ async def run(llm, fm, project: str, params: dict) -> dict:
 
 def _split_extracted_content(content: str, source_name: str) -> dict:
     """Split the LLM output into separate sections for different setting files."""
+    import re
+
     result = {
         "world": "",
         "characters": [],
@@ -203,65 +205,75 @@ def _split_extracted_content(content: str, source_name: str) -> dict:
         "relationships": "",
     }
 
-    # Try to find world setting section
-    world_markers = ["世界观设定", "世界设定", "世界背景", "地理区域", "势力组织", "力量体系"]
-    char_markers = ["人物设定", "角色设定", "主要人物", "角色列表"]
-    timeline_markers = ["时间线", "重大事件", "历史事件"]
+    # Remove JSON block before splitting
+    json_marker = "---JSON---"
+    main_content = content.split(json_marker)[0] if json_marker in content else content
 
-    world_start = -1
-    char_start = -1
-    timeline_start = -1
-    world_end = len(content)
+    # Markers: match any heading (# or ##) containing these keywords
+    world_pattern = re.compile(r'^#{1,2}\s*[^\n]*(?:世界|地理|势力|力量体系|背景设定)[^\n]*$', re.MULTILINE)
+    char_pattern = re.compile(r'^#{1,2}\s*[^\n]*(?:人物|角色)[^\n]*$', re.MULTILINE)
+    timeline_pattern = re.compile(r'^#{1,2}\s*[^\n]*(?:时间线|重大事件|历史)[^\n]*$', re.MULTILINE)
 
-    for marker in world_markers:
-        idx = content.find(f"# {marker}") if content.find(f"# {marker}") != -1 else content.find(f"## {marker}")
-        if idx != -1 and (world_start == -1 or idx < world_start):
-            world_start = idx
+    world_match = world_pattern.search(main_content)
+    char_match = char_pattern.search(main_content)
+    timeline_match = timeline_pattern.search(main_content)
 
-    for marker in char_markers:
-        idx = content.find(f"# {marker}") if content.find(f"# {marker}") != -1 else content.find(f"## {marker}")
-        if idx != -1:
-            char_start = idx
-            world_end = min(world_end, idx)
-            break
+    # Find all heading positions for section boundaries
+    all_headings = list(re.finditer(r'^#{1,2}\s+.+$', main_content, re.MULTILINE))
 
-    for marker in timeline_markers:
-        idx = content.find(f"# {marker}") if content.find(f"# {marker}") != -1 else content.find(f"## {marker}")
-        if idx != -1:
-            timeline_start = idx
-            if char_start != -1 and idx > char_start:
-                world_end = min(world_end, idx)
-            break
+    def _section_bounds(start_match, next_matches):
+        """Return (start_pos, end_pos) for a section given its start and potential ends."""
+        if not start_match:
+            return (-1, -1)
+        start = start_match.start()
+        end = len(main_content)
+        for m in next_matches:
+            if m and m.start() > start:
+                end = min(end, m.start())
+        return (start, end)
 
+    world_start, world_end = _section_bounds(world_match, [char_match, timeline_match])
+    char_start, char_end = _section_bounds(char_match, [timeline_match])
+    timeline_start, timeline_end = _section_bounds(timeline_match, [])
+
+    # Extract world setting
     if world_start != -1:
-        result["world"] = content[world_start:world_end].strip() if world_end > world_start else content[world_start:].strip()
+        result["world"] = main_content[world_start:world_end].strip()
     else:
-        result["world"] = content.split("---JSON---")[0].strip() if "---JSON---" in content else content
+        # Fallback: use everything before first character/timeline heading
+        if all_headings:
+            first_heading = all_headings[0]
+            # Check if content before first heading is significant
+            before = main_content[:first_heading.start()].strip()
+            if len(before) > 50:
+                result["world"] = before
+        if not result["world"]:
+            result["world"] = main_content.strip()
 
     # Extract character sections
     if char_start != -1:
-        char_end = timeline_start if timeline_start != -1 else len(content)
-        char_section = content[char_start:char_end] if char_end > char_start else content[char_start:]
+        char_section = main_content[char_start:char_end] if char_end > char_start else main_content[char_start:]
+        # Remove JSON block before splitting, so last character isn't discarded
+        char_section_clean = char_section.split(json_marker)[0] if json_marker in char_section else char_section
         # Split individual characters by ## headings
-        parts = char_section.split("\n## ")
+        parts = char_section_clean.split("\n## ")
         for part in parts:
             part = part.strip()
-            if part and "JSON" not in part:
-                if not part.startswith("#"):
-                    part = "## " + part
-                # Try to determine character name from first heading
-                lines = part.split("\n")
-                char_name = source_name + "角色"
-                for line in lines:
-                    if line.startswith("#") and "人物" not in line and "角色" not in line:
-                        char_name = line.lstrip("#").strip()
-                        break
+            if not part:
+                continue
+            if not part.startswith("#"):
+                part = "## " + part
+            lines = part.split("\n")
+            char_name = None
+            for line in lines:
+                if line.startswith("#") and "人物" not in line and "角色" not in line:
+                    char_name = line.lstrip("#").strip()
+                    break
+            if char_name:
                 result["characters"].append({"name": char_name, "content": part})
 
     # Extract timeline
     if timeline_start != -1:
-        json_start = content.find("---JSON---")
-        timeline_end = json_start if json_start != -1 else len(content)
-        result["timeline"] = content[timeline_start:timeline_end].strip() if timeline_end > timeline_start else ""
+        result["timeline"] = main_content[timeline_start:timeline_end].strip() if timeline_end > timeline_start else ""
 
     return result

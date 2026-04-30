@@ -25,6 +25,7 @@ async def get_config(request: Request):
         config["api_key"] = key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
     config["is_configured"] = request.app.state.llm.is_configured()
     config["api_key_source"] = config.get("api_key_source", "file")
+    config["theme"] = config.get("theme", {})
     return config
 
 

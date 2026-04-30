@@ -1,7 +1,7 @@
 /* ── Chapter Writing Chat Interface ──────────────── */
 .chat-container {
   display: flex; flex-direction: column; height: calc(100vh - 160px);
-  background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
 }
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 20px;
@@ -13,54 +13,54 @@
 
 .chat-message.system { text-align: center; }
 .chat-message.system .content {
-  display: inline-block; padding: 6px 14px; background: #f0f0f0;
-  border-radius: 12px; font-size: 13px; color: #888;
+  display: inline-block; padding: 6px 14px; background: var(--chat-system-bg);
+  border-radius: 12px; font-size: 13px; color: var(--color-text-muted);
 }
 .chat-message.user-message { text-align: right; }
 .chat-message.user-message .content {
-  display: inline-block; padding: 10px 16px; background: #4a90d9; color: #fff;
+  display: inline-block; padding: 10px 16px; background: var(--color-primary); color: var(--color-header-text);
   border-radius: 16px; max-width: 80%; text-align: left;
 }
 .chat-message.ai .content {
-  padding: 16px; background: #f8f9fa; border-radius: 8px;
-  border: 1px solid #eee; max-width: 85%;
+  padding: 16px; background: var(--color-surface-alt); border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color-light); max-width: 85%;
 }
 .chat-message.outline .content {
-  padding: 16px; background: #edf2f9; border-radius: 8px;
-  border: 1px solid #d0ddf0; max-width: 90%;
+  padding: 16px; background: var(--chat-outline-bg); border-radius: var(--radius-lg);
+  border: 1px solid var(--chat-outline-border); max-width: 90%;
 }
 .chat-message.text-chunk .content {
-  padding: 16px; background: #fff; border-radius: 8px;
-  border: 1px solid #eee; line-height: 1.9; font-size: 15px;
+  padding: 16px; background: var(--color-surface); border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color-light); line-height: 1.9; font-size: 15px;
 }
 .chat-message.summary .content {
-  padding: 14px; background: #e8f8ef; border-radius: 8px;
-  border: 1px solid #c3e6d6; font-size: 13px;
+  padding: 14px; background: var(--color-success-bg); border-radius: var(--radius-lg);
+  border: 1px solid var(--chat-summary-border); font-size: 13px;
 }
 
 .chat-message .label {
-  font-size: 11px; text-transform: uppercase; color: #999; margin-bottom: 4px;
+  font-size: 11px; text-transform: uppercase; color: var(--color-text-subtle); margin-bottom: 4px;
 }
 .chat-input-area {
-  display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid #eee;
-  background: #fafafa; border-radius: 0 0 8px 8px;
+  display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border-color-light);
+  background: var(--color-bg-content); border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 .chat-input-area input {
-  flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 20px;
+  flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-round);
   font-size: 14px;
 }
-.chat-input-area input:focus { outline: none; border-color: #4a90d9; }
+.chat-input-area input:focus { outline: none; border-color: var(--color-primary); }
 
 .chat-actions { display: flex; gap: 8px; margin-top: 10px; }
 .chapter-text-display {
-  padding: 24px; background: #fff; border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08); line-height: 1.9;
+  padding: 24px; background: var(--color-surface); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); line-height: 1.9;
   font-size: 15px; max-width: 800px; margin: 0 auto;
 }
 
 /* Streaming text cursor effect */
 .streaming-cursor::after {
-  content: "|"; animation: blink 0.8s infinite; color: #4a90d9;
+  content: "|"; animation: blink 0.8s infinite; color: var(--color-primary);
 }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 

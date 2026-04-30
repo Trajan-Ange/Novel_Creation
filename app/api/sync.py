@@ -67,3 +67,43 @@ async def extract_lore(request: Request, project: str, body: LoreExtractRequest)
         logger.error(f"Lore extract failed: {result.get('error', 'unknown')}")
         result["error"] = sanitize_error(Exception(str(result.get("error", ""))))
     return result
+
+
+class LoreApplyRequest(BaseModel):
+    project: str
+    world_setting: str = ""
+    characters: list[dict] = []
+    timeline: str = ""
+
+
+@router.post("/{project}/lore-apply")
+async def apply_lore(request: Request, project: str, body: LoreApplyRequest):
+    """Save extracted lore sections directly to project setting files."""
+    fm = request.app.state.fm
+
+    applied = []
+    if body.world_setting:
+        fm.write_world_setting(project, body.world_setting)
+        applied.append("world_setting")
+
+    for ch in body.characters:
+        name = (ch.get("name") or "").strip()
+        content = ch.get("content", "")
+        if not name or not content:
+            continue
+        # Sanitize name for filesystem safety (remove special chars)
+        safe_name = name.replace("/", "_").replace("\\", "_").replace(":", "_")
+        safe_name = safe_name.replace("*", "_").replace("?", "_").replace('"', "_")
+        safe_name = safe_name.replace("<", "_").replace(">", "_").replace("|", "_")
+        safe_name = safe_name[:100]
+        try:
+            fm.write_character(project, safe_name, content)
+            applied.append(f"character:{safe_name}")
+        except Exception as e:
+            logger.warning(f"Failed to write character {safe_name}: {e}")
+
+    if body.timeline:
+        fm.write_background_timeline(project, body.timeline)
+        applied.append("timeline")
+
+    return {"success": True, "applied": applied}

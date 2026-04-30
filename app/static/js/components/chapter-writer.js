@@ -222,7 +222,7 @@ function addChatInput(placeholder, onSubmit) {
   div.innerHTML = `
     <div class="content" style="display:flex;gap:8px;align-items:center">
       <input type="text" id="chat-feedback-input" placeholder="${placeholder}"
-        style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:20px;font-size:14px"
+        style="flex:1;padding:8px 12px;border:1px solid var(--border-color);border-radius:20px;font-size:14px"
         onkeydown="if(event.key==='Enter')document.getElementById('chat-submit-btn').click()">
       <button class="btn btn-primary btn-sm" id="chat-submit-btn">发送</button>
     </div>
@@ -335,26 +335,26 @@ function renderManualWriter(presetVol, presetCh) {
           <label style="font-weight:600;display:block;margin-bottom:8px">章节大纲</label>
           <textarea id="manual-outline-editor" class="manual-editor-textarea"
             placeholder="在此编写章节大纲...&#10;&#10;## 本章定位&#10;- &#10;&#10;## 核心事件&#10;1. &#10;2. &#10;&#10;## 人物目标&#10;- &#10;&#10;输入部分内容后，可点击「AI 接管」让 AI 帮你补全。"
-            style="width:100%;min-height:300px;font-family:inherit;font-size:14px;padding:12px;border:1px solid #ddd;border-radius:8px;resize:vertical"
+            style="width:100%;min-height:300px;font-family:inherit;font-size:14px;padding:12px;border:1px solid var(--border-color);border-radius:8px;resize:vertical"
           >${existingOutline}</textarea>
           <div style="margin-top:12px;display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="aiTakeoverOutline()">AI 接管大纲</button>
             <button class="btn btn-success btn-sm" onclick="saveManualOutline()">保存大纲</button>
           </div>
-          <div id="manual-outline-status" style="margin-top:8px;font-size:13px;color:#666"></div>
+          <div id="manual-outline-status" style="margin-top:8px;font-size:13px;color:var(--color-text-secondary)"></div>
         </div>
 
         <div id="manual-text-section" style="display:none">
           <label style="font-weight:600;display:block;margin-bottom:8px">章节正文</label>
           <textarea id="manual-text-editor" class="manual-editor-textarea"
             placeholder="在此编写章节正文...&#10;&#10;输入部分内容后，可点击「AI 接管」让 AI 从断点处续写。"
-            style="width:100%;min-height:400px;font-family:inherit;font-size:14px;padding:12px;border:1px solid #ddd;border-radius:8px;resize:vertical"
+            style="width:100%;min-height:400px;font-family:inherit;font-size:14px;padding:12px;border:1px solid var(--border-color);border-radius:8px;resize:vertical"
           >${existingText}</textarea>
           <div style="margin-top:12px;display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="aiTakeoverText()">AI 接管正文</button>
             <button class="btn btn-success btn-sm" onclick="saveManualText()">保存并更新</button>
           </div>
-          <div id="manual-text-status" style="margin-top:8px;font-size:13px;color:#666"></div>
+          <div id="manual-text-status" style="margin-top:8px;font-size:13px;color:var(--color-text-secondary)"></div>
         </div>
       </div>
     `;
@@ -386,11 +386,11 @@ async function saveManualOutline() {
 
   try {
     await API.outline.saveChapter(project, manualState.vol, manualState.ch, content);
-    statusEl.innerHTML = '<span style="color:#27ae60">大纲已保存 ✓</span>';
+    statusEl.innerHTML = '<span class="status-success">大纲已保存 ✓</span>';
     // Switch to text phase
     switchManualPhase('text');
   } catch (e) {
-    statusEl.innerHTML = `<span style="color:#e74c3c">保存失败：${e.message}</span>`;
+    statusEl.innerHTML = `<span class="status-error">保存失败：${e.message}</span>`;
   }
 }
 
@@ -401,21 +401,21 @@ async function saveManualText() {
 
   try {
     await API.chapters.save(project, manualState.vol, manualState.ch, content, '');
-    statusEl.innerHTML = '<span style="color:#27ae60">正文已保存 ✓ 正在触发知识同步...</span>';
+    statusEl.innerHTML = '<span class="status-success">正文已保存 ✓ 正在触发知识同步...</span>';
 
     // Trigger sync
     try {
       const result = await API.sync.trigger(project, manualState.vol, manualState.ch);
       if (result.success) {
-        statusEl.innerHTML = '<span style="color:#27ae60">正文已保存，创作依据已更新 ✓</span>';
+        statusEl.innerHTML = '<span class="status-success">正文已保存，创作依据已更新 ✓</span>';
       } else {
-        statusEl.innerHTML = `<span style="color:#e67e22">正文已保存，但同步可能未完成：${result.error || ''}</span>`;
+        statusEl.innerHTML = `<span class="status-warning">正文已保存，但同步可能未完成：${result.error || ''}</span>`;
       }
     } catch (e) {
-      statusEl.innerHTML = `<span style="color:#e67e22">正文已保存，但同步请求失败：${e.message}</span>`;
+      statusEl.innerHTML = `<span class="status-warning">正文已保存，但同步请求失败：${e.message}</span>`;
     }
   } catch (e) {
-    statusEl.innerHTML = `<span style="color:#e74c3c">保存失败：${e.message}</span>`;
+    statusEl.innerHTML = `<span class="status-error">保存失败：${e.message}</span>`;
   }
 }
 
@@ -426,13 +426,13 @@ function aiTakeoverOutline() {
   const partialContent = document.getElementById('manual-outline-editor').value || '';
 
   const statusEl = document.getElementById('manual-outline-status');
-  statusEl.innerHTML = '<span style="color:#3498db">AI 正在补全大纲...</span>';
+  statusEl.innerHTML = '<span class="status-info">AI 正在补全大纲...</span>';
 
   chapterSSE = new SSEClient();
   chapterSSE.onEvent = (event) => {
     switch (event.type) {
       case 'status':
-        statusEl.innerHTML = `<span style="color:#3498db">${event.message}</span>`;
+        statusEl.innerHTML = `<span class="status-info">${event.message}</span>`;
         break;
       case 'outline_chunk':
         const editor = document.getElementById('manual-outline-editor');
@@ -448,15 +448,15 @@ function aiTakeoverOutline() {
         }
         break;
       case 'done':
-        statusEl.innerHTML = '<span style="color:#27ae60">AI 接管完成 ✓ 请检查并保存。</span>';
+        statusEl.innerHTML = '<span class="status-success">AI 接管完成 ✓ 请检查并保存。</span>';
         break;
       case 'error':
-        statusEl.innerHTML = `<span style="color:#e74c3c">AI 接管失败：${event.message}</span>`;
+        statusEl.innerHTML = `<span class="status-error">AI 接管失败：${event.message}</span>`;
         break;
     }
   };
   chapterSSE.onError = (err) => {
-    statusEl.innerHTML = `<span style="color:#e74c3c">连接出错：${err.message}</span>`;
+    statusEl.innerHTML = `<span class="status-error">连接出错：${err.message}</span>`;
   };
 
   chapterSSE.connect('/api/chapters/generate', {
@@ -476,13 +476,13 @@ function aiTakeoverText() {
   const partialContent = document.getElementById('manual-text-editor').value || '';
 
   const statusEl = document.getElementById('manual-text-status');
-  statusEl.innerHTML = '<span style="color:#3498db">AI 正在续写正文...</span>';
+  statusEl.innerHTML = '<span class="status-info">AI 正在续写正文...</span>';
 
   chapterSSE = new SSEClient();
   chapterSSE.onEvent = (event) => {
     switch (event.type) {
       case 'status':
-        statusEl.innerHTML = `<span style="color:#3498db">${event.message}</span>`;
+        statusEl.innerHTML = `<span class="status-info">${event.message}</span>`;
         break;
       case 'text_chunk':
         const editor = document.getElementById('manual-text-editor');
@@ -490,18 +490,18 @@ function aiTakeoverText() {
         editor.scrollTop = editor.scrollHeight;
         break;
       case 'text_complete':
-        statusEl.innerHTML = '<span style="color:#27ae60">AI 续写完成 ✓ 请检查后保存。</span>';
+        statusEl.innerHTML = '<span class="status-success">AI 续写完成 ✓ 请检查后保存。</span>';
         break;
       case 'done':
-        statusEl.innerHTML = '<span style="color:#27ae60">AI 续写完成 ✓ 请检查后保存。</span>';
+        statusEl.innerHTML = '<span class="status-success">AI 续写完成 ✓ 请检查后保存。</span>';
         break;
       case 'error':
-        statusEl.innerHTML = `<span style="color:#e74c3c">AI 续写失败：${event.message}</span>`;
+        statusEl.innerHTML = `<span class="status-error">AI 续写失败：${event.message}</span>`;
         break;
     }
   };
   chapterSSE.onError = (err) => {
-    statusEl.innerHTML = `<span style="color:#e74c3c">连接出错：${err.message}</span>`;
+    statusEl.innerHTML = `<span class="status-error">连接出错：${err.message}</span>`;
   };
 
   chapterSSE.connect('/api/chapters/generate', {

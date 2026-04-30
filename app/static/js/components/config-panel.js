@@ -11,12 +11,12 @@ async function openConfig() {
     document.getElementById('cfg-temperature').value = cfg.temperature || 0.7;
     document.getElementById('cfg-max-tokens').value = cfg.max_tokens || 4096;
     if (cfg.is_configured) {
-      statusEl.innerHTML = '<span style="color:#27ae60">已配置（密钥已保存，输入框留空则不清除）</span>';
+      statusEl.innerHTML = '<span class="status-success">已配置（密钥已保存，输入框留空则不清除）</span>';
     } else {
-      statusEl.innerHTML = '<span style="color:#e67e22">未配置 API 密钥</span>';
+      statusEl.innerHTML = '<span class="status-warning">未配置 API 密钥</span>';
     }
   } catch (e) {
-    statusEl.innerHTML = '<span style="color:#e74c3c">无法加载配置</span>';
+    statusEl.innerHTML = '<span class="status-error">无法加载配置</span>';
   }
   modal.style.display = 'flex';
 }
@@ -52,13 +52,13 @@ async function saveConfig() {
 
   saveBtn.disabled = true;
   saveBtn.textContent = '保存中...';
-  statusEl.innerHTML = '<span style="color:#999">正在保存...</span>';
+  statusEl.innerHTML = '<span style="color:var(--color-text-subtle)">正在保存...</span>';
 
   try {
     const result = await API.config.save(cfg);
     if (result.success) {
       AppState.apiConfigured = true;
-      statusEl.innerHTML = '<span style="color:#27ae60">配置已保存</span>';
+      statusEl.innerHTML = '<span class="status-success">配置已保存</span>';
       document.getElementById('cfg-api-key').value = '';
       document.getElementById('cfg-api-key').placeholder = '密钥已保存（已隐藏）';
       saveBtn.textContent = '保存配置';
@@ -67,7 +67,7 @@ async function saveConfig() {
       throw new Error(result.error || '保存失败');
     }
   } catch (e) {
-    statusEl.innerHTML = '<span style="color:#e74c3c">保存失败：' + (e.message || '网络错误') + '</span>';
+    statusEl.innerHTML = '<span class="status-error">保存失败：' + (e.message || '网络错误') + '</span>';
     saveBtn.textContent = '保存配置';
     saveBtn.disabled = false;
   }
@@ -79,7 +79,7 @@ async function testConnection() {
 
   testBtn.disabled = true;
   testBtn.textContent = '测试中...';
-  statusEl.innerHTML = '<span style="color:#999">正在测试连接...</span>';
+  statusEl.innerHTML = '<span style="color:var(--color-text-subtle)">正在测试连接...</span>';
 
   // Save config first if there's a new key
   const apiKey = document.getElementById('cfg-api-key').value.trim();
@@ -90,12 +90,12 @@ async function testConnection() {
   try {
     const result = await API.config.test();
     if (result.success) {
-      statusEl.innerHTML = '<span style="color:#27ae60">连接成功！模型响应：' + (result.message || 'OK') + '</span>';
+      statusEl.innerHTML = '<span class="status-success">连接成功！模型响应：' + (result.message || 'OK') + '</span>';
     } else {
-      statusEl.innerHTML = '<span style="color:#e74c3c">连接失败：' + (result.error || '未知错误') + '</span>';
+      statusEl.innerHTML = '<span class="status-error">连接失败：' + (result.error || '未知错误') + '</span>';
     }
   } catch (e) {
-    statusEl.innerHTML = '<span style="color:#e74c3c">测试请求失败：' + (e.message || '网络错误') + '</span>';
+    statusEl.innerHTML = '<span class="status-error">测试请求失败：' + (e.message || '网络错误') + '</span>';
   }
 
   testBtn.disabled = false;

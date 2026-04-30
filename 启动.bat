@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo ========================================
-echo     Novel Creation System v0.2.4
+echo     Novel Creation System v0.3.0
 echo ========================================
 echo(
 
@@ -24,6 +24,8 @@ echo [3/3] Starting server...
 echo(
 echo Server running at http://127.0.0.1:8000
 echo Close this window to stop the server.
+echo(
+echo Tip: Set NOVEL_ENV=production for optimized mode.
 echo(
 
 python main.py

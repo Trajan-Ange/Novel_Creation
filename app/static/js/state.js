@@ -6,6 +6,45 @@ const AppState = {
 };
 const $content = document.getElementById('content');
 
+// Theme management
+const THEMES = ['light', 'dark', 'warm', 'forest'];
+const THEME_LABELS = { light: '亮色', dark: '暗色', warm: '暖色', forest: '森林' };
+
+function getCurrentTheme() {
+  return document.documentElement.getAttribute('data-theme') || 'light';
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('novel-theme', theme);
+}
+
+function cycleTheme() {
+  const current = getCurrentTheme();
+  const idx = THEMES.indexOf(current);
+  const next = THEMES[(idx + 1) % THEMES.length];
+  setTheme(next);
+  return next;
+}
+
+function setDensity(density) {
+  document.documentElement.setAttribute('data-density', density);
+  localStorage.setItem('novel-density', density);
+}
+
+function getDensity() {
+  return document.documentElement.getAttribute('data-density') || 'default';
+}
+
+function setFontScale(scale) {
+  document.documentElement.setAttribute('data-font-scale', scale);
+  localStorage.setItem('novel-font-scale', scale);
+}
+
+function getFontScale() {
+  return document.documentElement.getAttribute('data-font-scale') || 'default';
+}
+
 const _SSE_VARS = ['chapterSSE', 'outlineStreamingClient', 'settingsChatClient', 'wizardSSEClient'];
 
 function hasActiveSSE() {

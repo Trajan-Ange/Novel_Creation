@@ -148,5 +148,7 @@ const API = {
       API.post(`/api/sync/${encodeURIComponent(project)}/trigger`, { project, volume, chapter }),
     loreExtract: (project, sourceName, scope = [], customRequirements = '') =>
       API.post(`/api/sync/${encodeURIComponent(project)}/lore-extract`, { project, source_name: sourceName, scope, custom_requirements: customRequirements }),
+    loreApply: (project, worldSetting, characters, timeline) =>
+      API.post(`/api/sync/${encodeURIComponent(project)}/lore-apply`, { project, world_setting: worldSetting, characters, timeline }),
   },
 };
